@@ -29,6 +29,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Course/CourseRenderer.gd"
 }, {
+"base": "Object",
+"class": "FileUtils",
+"language": "GDScript",
+"path": "res://FileUtils.gd"
+}, {
 "base": "BaseController",
 "class": "PlayerController",
 "language": "GDScript",
@@ -43,15 +48,22 @@ _global_script_classes=[ {
 "class": "VehicleType",
 "language": "GDScript",
 "path": "res://Vehicle/VehicleType.gd"
+}, {
+"base": "MeshInstance",
+"class": "WireframeMesh",
+"language": "GDScript",
+"path": "res://Mesh/WireframeMesh.gd"
 } ]
 _global_script_class_icons={
 "BaseController": "",
 "Course": "",
 "CourseArea": "",
 "CourseRenderer": "",
+"FileUtils": "",
 "PlayerController": "",
 "Vehicle": "",
-"VehicleType": ""
+"VehicleType": "",
+"WireframeMesh": ""
 }
 
 [application]

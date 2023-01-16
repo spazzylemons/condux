@@ -71,7 +71,9 @@ func set_controller(path: String) -> void:
 # helper function for spawning a player-controlled vehicle
 static func spawn_player(vehicle_type: VehicleType, position: Vector3) -> Vehicle:
 	# load from scene
-	var vehicle = load("res://Vehicle/Vehicle.tscn").instance()
+	var x = load("res://Vehicle/Vehicle.tscn")
+	print(x)
+	var vehicle = x.instance()
 	vehicle.type = vehicle_type
 	# give the player control of this vehicle
 	vehicle.set_controller("res://Vehicle/Controller/PlayerController.gd")

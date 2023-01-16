@@ -17,18 +17,6 @@ var _lengths = []
 var _tilts = []
 var _mesh: Mesh
 
-static func _get_fixed(f: File) -> int:
-	var word = f.get_16()
-	if word >= 32768:
-		word -= 65536
-	return word / 256.0
-
-static func _get_point(f: File) -> Vector3:
-	var px = _get_fixed(f)
-	var py = _get_fixed(f)
-	var pz = -_get_fixed(f)
-	return Vector3(px, py, pz)
-
 func _ready() -> void:
 	# spawn player
 	var vehicle = Vehicle.spawn_player(VehicleTypes.test_model, get_from_offset(0.0) + Vector3.UP)
@@ -53,9 +41,9 @@ func _try_load_course() -> void:
 	var n = f.get_8()
 	_curve.clear_points()
 	for _i in range(n):
-		var l = _get_point(f)
-		var c = _get_point(f)
-		var r = _get_point(f)
+		var l = FileUtils.get_point(f)
+		var c = FileUtils.get_point(f)
+		var r = FileUtils.get_point(f)
 		var t = (f.get_8() / 256.0) * (2.0 * PI)
 		_curve.add_point(c, l - c, r - c)
 		_lengths.append(_curve.get_baked_length())
