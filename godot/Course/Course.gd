@@ -29,24 +29,17 @@ static func _get_point(f: File) -> Vector3:
 	var pz = -_get_fixed(f)
 	return Vector3(px, py, pz)
 
-static func _interp(n: float) -> float:
-	var nn = n * n
-	return (3 * nn) - (2 * nn * n)
-
 func _ready() -> void:
-	# only do this stuff if we're not in the editor
-	if not Engine.editor_hint:
-		# load vehicle scene and set its spawn point
-		var scene = preload("res://Vehicle/Vehicle.tscn").instance()
-		scene.translation = get_from_offset(0.0) + Vector3.UP
-		add_child(scene)
-		# create collision body and shape
-		var body = StaticBody.new()
-		var shape = CollisionShape.new()
-		shape.shape = get_mesh().create_trimesh_shape()
-		# add as child
-		body.add_child(shape)
-		add_child(body)
+	# spawn player
+	var vehicle = Vehicle.spawn_player(get_from_offset(0.0) + Vector3.UP)
+	add_child(vehicle)
+	# create collision body and shape
+	var body = StaticBody.new()
+	var shape = CollisionShape.new()
+	shape.shape = get_mesh().create_trimesh_shape()
+	# add as child
+	body.add_child(shape)
+	add_child(body)
 	# create line renderer child
 	var renderer = CourseRenderer.new()
 	renderer.load_course(self)

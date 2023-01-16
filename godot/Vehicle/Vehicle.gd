@@ -17,24 +17,13 @@ var gravity_vector = Vector3.UP
 var gravity_areas = {}
 var accelerator = 0.0
 
-func _get_input() -> float:
-	return Input.get_action_strength("stick_left") - Input.get_action_strength("stick_right")
-
 func _physics_process(delta):
 	# turning
-	rotate_object_local(Vector3.UP, _get_input() * STEER_FACTOR * delta)
+	rotate_object_local(Vector3.UP, $Controller.get_steering() * STEER_FACTOR * delta)
 	# movement
-	if Input.is_action_pressed("accel"):
-		accelerator += delta * ACCELERATOR_ADJUST
-	else:
-		accelerator -= delta * ACCELERATOR_ADJUST
-	if Input.is_action_pressed("brake"):
-		accelerator -= delta * ACCELERATOR_ADJUST
-	if accelerator < 0.0:
-		accelerator = 0.0
-	if accelerator > ACCELERATOR_MAX:
-		accelerator = ACCELERATOR_MAX
+	accelerator += clamp(delta * ACCELERATOR_ADJUST * $Controller.get_pedal(), 0.0, ACCELERATOR_MAX)
 	move_and_collide(transform.basis.xform(Vector3.FORWARD) * delta * accelerator)
+	# gravity handling
 	var new_gravity_vector = Vector3.ZERO
 	for area in gravity_areas.keys():
 		if area.overlaps_body(self):
@@ -56,3 +45,16 @@ func _physics_process(delta):
 		gravity = 0.0
 	gravity -= delta * GRAVITY_STRENGTH
 	orthonormalize()
+
+func set_controller(path: String) -> void:
+	$Controller.set_script(load(path))
+
+# helper function for spawning a player-controlled vehicle
+static func spawn_player(position: Vector3) -> Vehicle:
+	# load from scene
+	var vehicle = load("res://Vehicle/Vehicle.tscn").instance()
+	# give the player control of this vehicle
+	vehicle.set_controller("res://Vehicle/Controller/PlayerController.gd")
+	# place the vehicle at the given position
+	vehicle.translation = position
+	return vehicle

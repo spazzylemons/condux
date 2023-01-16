@@ -9,6 +9,11 @@
 config_version=4
 
 _global_script_classes=[ {
+"base": "Node",
+"class": "BaseController",
+"language": "GDScript",
+"path": "res://Vehicle/Controller/BaseController.gd"
+}, {
 "base": "Spatial",
 "class": "Course",
 "language": "GDScript",
@@ -24,15 +29,22 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Course/CourseRenderer.gd"
 }, {
+"base": "BaseController",
+"class": "PlayerController",
+"language": "GDScript",
+"path": "res://Vehicle/Controller/PlayerController.gd"
+}, {
 "base": "KinematicBody",
 "class": "Vehicle",
 "language": "GDScript",
 "path": "res://Vehicle/Vehicle.gd"
 } ]
 _global_script_class_icons={
+"BaseController": "",
 "Course": "",
 "CourseArea": "",
 "CourseRenderer": "",
+"PlayerController": "",
 "Vehicle": ""
 }
 
