@@ -10,5 +10,7 @@ func _on_body_exited(body: Node) -> void:
 		body.gravity_areas.erase(self)
 
 func _ready() -> void:
-	connect("body_entered", self, "_on_body_entered")
-	connect("body_exited", self, "_on_body_exited")
+	if connect("body_entered", self, "_on_body_entered") != OK:
+		assert(false, "signal connection failure")
+	if connect("body_exited", self, "_on_body_exited") != OK:
+		assert(false, "signal connection failure")
