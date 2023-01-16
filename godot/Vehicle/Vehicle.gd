@@ -5,23 +5,19 @@ class_name Vehicle
 const GRAVITY_APPROACH_SPEED = 4.0
 # speed at which gravity increases
 const GRAVITY_STRENGTH = 5.0
-# maximum forward velocity
-const ACCELERATOR_MAX = 8.0
-# increase/decrease factor of accelerator
-const ACCELERATOR_ADJUST = 3.5
-# multiplier of steer value which is [-1, 1]
-const STEER_FACTOR = 1.5
 
 var gravity = 0.0
 var gravity_vector = Vector3.UP
 var gravity_areas = {}
 var accelerator = 0.0
 
+var type: VehicleType
+
 func _physics_process(delta):
 	# turning
-	rotate_object_local(Vector3.UP, $Controller.get_steering() * STEER_FACTOR * delta)
+	rotate_object_local(Vector3.UP, $Controller.get_steering() * type.handling * delta)
 	# movement
-	accelerator += clamp(delta * ACCELERATOR_ADJUST * $Controller.get_pedal(), 0.0, ACCELERATOR_MAX)
+	accelerator = clamp(accelerator + delta * type.acceleration * (2.0 * $Controller.get_pedal() - 1.0), 0.0, type.speed)
 	move_and_collide(transform.basis.xform(Vector3.FORWARD) * delta * accelerator)
 	# gravity handling
 	var new_gravity_vector = Vector3.ZERO
@@ -50,9 +46,10 @@ func set_controller(path: String) -> void:
 	$Controller.set_script(load(path))
 
 # helper function for spawning a player-controlled vehicle
-static func spawn_player(position: Vector3) -> Vehicle:
+static func spawn_player(vehicle_type: VehicleType, position: Vector3) -> Vehicle:
 	# load from scene
 	var vehicle = load("res://Vehicle/Vehicle.tscn").instance()
+	vehicle.type = vehicle_type
 	# give the player control of this vehicle
 	vehicle.set_controller("res://Vehicle/Controller/PlayerController.gd")
 	# place the vehicle at the given position

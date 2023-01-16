@@ -31,7 +31,7 @@ static func _get_point(f: File) -> Vector3:
 
 func _ready() -> void:
 	# spawn player
-	var vehicle = Vehicle.spawn_player(get_from_offset(0.0) + Vector3.UP)
+	var vehicle = Vehicle.spawn_player(VehicleTypes.test_model, get_from_offset(0.0) + Vector3.UP)
 	add_child(vehicle)
 	# create collision body and shape
 	var body = StaticBody.new()
@@ -87,7 +87,6 @@ func _try_load_course() -> void:
 		# b---d
 		# |   |
 		# a---c
-		var origin = _curve.interpolate_baked(d)
 		var points = PoolVector3Array()
 		var ua = u[i]
 		var ub = u[i+1]
