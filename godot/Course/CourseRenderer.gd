@@ -11,8 +11,8 @@ func load_course(c) -> void:
 	while d < c.get_length():
 		var p = c.get_from_offset(d)
 		var r = c.get_right_vector(d)
-		vl.append(p - r)
-		vr.append(p + r)
+		vl.append(p - r * Course.TRACK_RADIUS)
+		vr.append(p + r * Course.TRACK_RADIUS)
 		d += SPACING_INTERVAL
 	vl.append(vl[0])
 	vr.append(vr[0])

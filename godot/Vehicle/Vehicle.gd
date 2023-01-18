@@ -2,9 +2,9 @@ extends KinematicBody
 class_name Vehicle
 
 # speed at which gravity approaches new vector
-const GRAVITY_APPROACH_SPEED = 4.0
+const GRAVITY_APPROACH_SPEED = 8.0
 # speed at which gravity increases
-const GRAVITY_STRENGTH = 5.0
+const GRAVITY_STRENGTH = 10.0
 
 var gravity_areas = {}
 

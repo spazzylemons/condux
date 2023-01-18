@@ -44,6 +44,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Vehicle/Vehicle.gd"
 }, {
+"base": "Camera",
+"class": "VehicleCamera",
+"language": "GDScript",
+"path": "res://Vehicle/VehicleCamera.gd"
+}, {
 "base": "Reference",
 "class": "VehicleType",
 "language": "GDScript",
@@ -62,6 +67,7 @@ _global_script_class_icons={
 "FileUtils": "",
 "PlayerController": "",
 "Vehicle": "",
+"VehicleCamera": "",
 "VehicleType": "",
 "WireframeMesh": ""
 }

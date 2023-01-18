@@ -8,6 +8,9 @@ const MIN_GRAVITY_HEIGHT = 0.1
 # gravity areas will not affect vehicles above this height
 const MAX_GRAVITY_HEIGHT = 1.0
 
+# radius of track - width of track is twice this
+const TRACK_RADIUS = 2.0
+
 export var path: String
 
 var _loaded = false
@@ -21,6 +24,11 @@ func _ready() -> void:
 	# spawn player
 	var vehicle = Vehicle.spawn_player(VehicleTypes.test_model, get_from_offset(0.0) + Vector3.UP)
 	add_child(vehicle)
+	# add camera for player
+	var camera = VehicleCamera.new()
+	camera.vehicle = vehicle
+	add_child(camera)
+	camera.set_initial_pos()
 	# create collision body and shape
 	var body = StaticBody.new()
 	var shape = CollisionShape.new()
@@ -28,8 +36,8 @@ func _ready() -> void:
 	# add as child
 	body.add_child(shape)
 	add_child(body)
-	# create line renderer child
-	var renderer = CourseRenderer.new()
+	# create line renderer child - need to do load to avoid cyclic ref
+	var renderer = load("res://Course/CourseRenderer.gd").new()
 	renderer.load_course(self)
 	add_child(renderer)
 
@@ -62,8 +70,8 @@ func _try_load_course() -> void:
 	while d < _curve.get_baked_length():
 		var p = _curve.interpolate_baked(d)
 		var ur = _get_up_and_right_vector(d)
-		pl.append(p - ur[1])
-		pr.append(p + ur[1])
+		pl.append(p - ur[1] * TRACK_RADIUS)
+		pr.append(p + ur[1] * TRACK_RADIUS)
 		u.append(ur[0])
 		d += _curve.bake_interval
 	pl.append(pl[0])

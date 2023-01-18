@@ -22,7 +22,7 @@ func _ready():
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINE_STRIP, a)
 	f.close()
 
-static func create(path: String) -> MeshInstance:
+static func create(new_path: String) -> MeshInstance:
 	var result = MeshInstance.new()
-	result.path = path
+	result.path = new_path
 	return result
