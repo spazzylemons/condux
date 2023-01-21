@@ -1,4 +1,4 @@
-extends Node
+extends Reference
 class_name BaseController
 
 func get_steering() -> float:

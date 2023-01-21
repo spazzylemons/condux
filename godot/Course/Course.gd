@@ -1,13 +1,6 @@
 extends Spatial
 class_name Course
 
-# gravity areas don't extend all the way to the floor - otherwise colliding with
-# track from below has strange results
-const MIN_GRAVITY_HEIGHT = 0.1
-
-# gravity areas will not affect vehicles above this height
-const MAX_GRAVITY_HEIGHT = 1.0
-
 # radius of track - width of track is twice this
 const TRACK_RADIUS = 2.0
 
@@ -18,24 +11,26 @@ var _loaded = false
 var _curve = Curve3D.new()
 var _lengths = []
 var _tilts = []
-var _mesh: Mesh
 
 func _ready() -> void:
+	var vehicle_set = VehicleSet.new()
+	add_child(vehicle_set)
 	# spawn player
-	var vehicle = Vehicle.spawn_player(VehicleTypes.test_model, get_from_offset(0.0) + Vector3.UP)
-	add_child(vehicle)
+	var vehicle = Vehicle.spawn_basic(self, VehicleTypes.test_model, get_from_offset(0.0) + Vector3.UP)
+	vehicle.controller = PlayerController.new()
+	vehicle_set.add_child(vehicle)
 	# add camera for player
 	var camera = VehicleCamera.new()
 	camera.vehicle = vehicle
 	add_child(camera)
 	camera.set_initial_pos()
-	# create collision body and shape
-	var body = StaticBody.new()
-	var shape = CollisionShape.new()
-	shape.shape = get_mesh().create_trimesh_shape()
-	# add as child
-	body.add_child(shape)
-	add_child(body)
+	# for physics testing, add some more vehicles
+	var basic = Vehicle.spawn_basic(self, VehicleTypes.test_model, get_from_offset(5.0) + Vector3.UP)
+	vehicle_set.add_child(basic)
+	basic = Vehicle.spawn_basic(self, VehicleTypes.test_model, get_from_offset(10.0) + Vector3.UP)
+	vehicle_set.add_child(basic)
+	basic = Vehicle.spawn_basic(self, VehicleTypes.test_model, get_from_offset(15.0) + Vector3.UP)
+	vehicle_set.add_child(basic)
 	# create line renderer child - need to do load to avoid cyclic ref
 	var renderer = load("res://Course/CourseRenderer.gd").new()
 	renderer.load_course(self)
@@ -44,6 +39,7 @@ func _ready() -> void:
 func _try_load_course() -> void:
 	if _loaded:
 		return
+	_curve.bake_interval = 1.0
 	var f = File.new()
 	f.open(path, File.READ)
 	var n = f.get_8()
@@ -61,69 +57,6 @@ func _try_load_course() -> void:
 	_tilts.append(_tilts[0])
 	_curve.add_point(_curve.get_point_position(0), _curve.get_point_in(0), _curve.get_point_out(0))
 	_lengths.append(_curve.get_baked_length())
-	# generate areas
-	# calculate all the points on the mesh
-	var pl = []
-	var pr = []
-	var u = []
-	var d = 0.0
-	while d < _curve.get_baked_length():
-		var p = _curve.interpolate_baked(d)
-		var ur = _get_up_and_right_vector(d)
-		pl.append(p - ur[1] * TRACK_RADIUS)
-		pr.append(p + ur[1] * TRACK_RADIUS)
-		u.append(ur[0])
-		d += _curve.bake_interval
-	pl.append(pl[0])
-	pr.append(pr[0])
-	u.append(u[0])
-	d = _curve.bake_interval / 2.0
-	var vertices = PoolVector3Array()
-	for i in range(len(pl) - 1):
-		# b---d
-		# |   |
-		# a---c
-		var points = PoolVector3Array()
-		var ua = u[i]
-		var ub = u[i+1]
-		var pa = pl[i]
-		var pb = pl[i+1]
-		var pc = pr[i]
-		var pd = pr[i+1]
-		var um = (ua + ub).normalized()
-		# a -> b -> d triangle
-		vertices.push_back(pa)
-		vertices.push_back(pb)
-		vertices.push_back(pd)
-		# a -> d -> c triangle
-		vertices.push_back(pa)
-		vertices.push_back(pd)
-		vertices.push_back(pc)
-		# add lower face of area
-		points.append(pa + ua * MIN_GRAVITY_HEIGHT)
-		points.append(pb + ub * MIN_GRAVITY_HEIGHT)
-		points.append(pc + ua * MIN_GRAVITY_HEIGHT)
-		points.append(pd + ub * MIN_GRAVITY_HEIGHT)
-		# add upper face of area
-		points.append(pa + ua * MAX_GRAVITY_HEIGHT)
-		points.append(pb + ub * MAX_GRAVITY_HEIGHT)
-		points.append(pc + ua * MAX_GRAVITY_HEIGHT)
-		points.append(pd + ub * MAX_GRAVITY_HEIGHT)
-		var shape = ConvexPolygonShape.new()
-		shape.points = points
-		var collision_shape = CollisionShape.new()
-		collision_shape.shape = shape
-		var area = CourseArea.new()
-		area.add_child(collision_shape)
-		area.gravity_vec = um
-		add_child(area)
-		d += _curve.bake_interval
-	# build mesh
-	_mesh = ArrayMesh.new()
-	var arrays = []
-	arrays.resize(ArrayMesh.ARRAY_MAX)
-	arrays[ArrayMesh.ARRAY_VERTEX] = vertices
-	_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	_loaded = true
 
 func _find_interp(offset: float) -> float:
@@ -182,7 +115,7 @@ func get_up_vector_and_height(pos: Vector3) -> Array:
 	var point = _curve.interpolate_baked(offset)
 	var up_and_right = _get_up_and_right_vector(offset)
 	var side_distance = up_and_right[1].dot(pos - point)
-	if side_distance < -1.0 or side_distance > 1.0:
+	if side_distance < -TRACK_RADIUS or side_distance > TRACK_RADIUS:
 		return []
 	return [up_and_right[0], up_and_right[0].dot(pos - point)]
 
@@ -197,7 +130,3 @@ func get_from_offset(offset: float) -> Vector3:
 func get_bake_interval() -> float:
 	_try_load_course()
 	return _curve.bake_interval
-
-func get_mesh() -> Mesh:
-	_try_load_course()
-	return _mesh
