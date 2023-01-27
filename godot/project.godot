@@ -34,7 +34,12 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Vehicle/Controller/PlayerController.gd"
 }, {
-"base": "KinematicBody",
+"base": "Reference",
+"class": "Spline",
+"language": "GDScript",
+"path": "res://Course/Spline.gd"
+}, {
+"base": "Area",
 "class": "Vehicle",
 "language": "GDScript",
 "path": "res://Vehicle/Vehicle.gd"
@@ -65,6 +70,7 @@ _global_script_class_icons={
 "CourseRenderer": "",
 "FileUtils": "",
 "PlayerController": "",
+"Spline": "",
 "Vehicle": "",
 "VehicleCamera": "",
 "VehicleSet": "",

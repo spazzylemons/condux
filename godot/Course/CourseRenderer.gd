@@ -10,6 +10,7 @@ func load_course(c) -> void:
 	var vr = []
 	while d < c.get_length():
 		var p = c.get_from_offset(d)
+		#print(p, ',')
 		var r = c.get_right_vector(d)
 		vl.append(p - r * Course.TRACK_RADIUS)
 		vr.append(p + r * Course.TRACK_RADIUS)

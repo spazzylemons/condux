@@ -43,7 +43,7 @@ surfaces/2 = {
 "vertex_count": 2
 }
 
-[node name="Vehicle" type="KinematicBody"]
+[node name="Vehicle" type="Area"]
 collision_layer = 2
 script = ExtResource( 1 )
 

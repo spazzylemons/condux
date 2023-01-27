@@ -1,4 +1,4 @@
-extends KinematicBody
+extends Area
 class_name Vehicle
 
 # speed at which gravity approaches new vector
@@ -22,6 +22,10 @@ var velocity = Vector3.ZERO
 var type: VehicleType
 
 var controller := BaseController.new()
+
+func _ready() -> void:
+	monitorable = false
+	monitoring = false
 
 static func _apply_approach(delta: float, strength: float, from: Vector3, to: Vector3) -> Vector3:
 	return (from + (strength * delta * to)) / (1.0 + (strength * delta))
@@ -56,6 +60,7 @@ func _do_movement(delta: float) -> void:
 	# slide with physics
 	translation += velocity * delta
 	var up_height = course.get_up_vector_and_height(translation)
+	var new_gravity_vector = Vector3.UP
 	if len(up_height) > 0:
 		var up = up_height[0]
 		var height = up_height[1]
@@ -70,23 +75,13 @@ func _do_movement(delta: float) -> void:
 				# otherwise, use friction
 				velocity = with_friction_applied
 			translation -= up * height
-
-func _approach_gravity(delta: float) -> Vector3:
-	var new_gravity_vector = Vector3.UP
-	var up_height = course.get_up_vector_and_height(translation)
-	if len(up_height) > 0:
-		var up = up_height[0]
-		var height = up_height[1]
 		if height > -COLLISION_DEPTH and height < MAX_GRAVITY_HEIGHT:
 			height = clamp(height - GRAVITY_FALLOFF_POINT, 0, MAX_GRAVITY_HEIGHT - GRAVITY_FALLOFF_POINT)
 			height /= (MAX_GRAVITY_HEIGHT - GRAVITY_FALLOFF_POINT)
 			new_gravity_vector = height * Vector3.UP + (1.0 - height) * up
 	new_gravity_vector = new_gravity_vector.normalized()
-	return _apply_approach(delta, GRAVITY_APPROACH_SPEED, _up_vector(), new_gravity_vector)
-
-func _do_gravity(delta: float) -> void:
 	var our_up = _up_vector()
-	var approach_up = _approach_gravity(delta)
+	var approach_up = _apply_approach(delta, GRAVITY_APPROACH_SPEED, _up_vector(), new_gravity_vector)
 	var rotation_axis = our_up.cross(approach_up).normalized()
 	# only perform alignment if our up vector is not parallel to gravity
 	# if it is, we're either perfectly aligned or completely flipped
@@ -97,7 +92,6 @@ func _do_gravity(delta: float) -> void:
 func process_physics(delta: float) -> void:
 	_do_controls(delta)
 	_do_movement(delta)
-	_do_gravity(delta)
 	orthonormalize()
 
 # helper function for spawning a vehicle
