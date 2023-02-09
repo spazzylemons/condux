@@ -3,17 +3,16 @@ class_name CourseRenderer
 
 const SPACING_INTERVAL = 1.0
 
-func load_course(c) -> void:
+func load_course(spline: Spline) -> void:
 	# precalculate all the points to render
 	var d = 0.0
 	var vl = []
 	var vr = []
-	while d < c.get_length():
-		var p = c.get_from_offset(d)
-		#print(p, ',')
-		var r = c.get_right_vector(d)
-		vl.append(p - r * Course.TRACK_RADIUS)
-		vr.append(p + r * Course.TRACK_RADIUS)
+	while d < spline.get_length():
+		var p = spline.get_baked(d)
+		var r = spline.get_right_vector(d)
+		vl.append(p - r * Spline.TRACK_RADIUS)
+		vr.append(p + r * Spline.TRACK_RADIUS)
 		d += SPACING_INTERVAL
 	vl.append(vl[0])
 	vr.append(vr[0])

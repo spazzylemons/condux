@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Condux Web Demo</title>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script type="module">
+      (async () => {
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const response = await fetch('./index.wasm');
+        const bytes = await response.arrayBuffer();
+        const { instance } = await WebAssembly.instantiate(bytes, {
+          env: {
+            platform_init(preferredWidth, preferredHeight) {
+              canvas.width = preferredWidth;
+              canvas.height = preferredHeight;
+            },
+
+            platform_line(x0, y0, x1, y1) {
+              ctx.lineWidth = 1;
+              ctx.strokeStyle = 'white';
+              ctx.beginPath();
+              ctx.moveTo(x0, y0);
+              ctx.lineTo(x1, y1);
+              ctx.stroke();
+            },
+
+            platform_width() {
+              return canvas.width;
+            },
+
+            platform_height() {
+              return canvas.height;
+            }
+          },
+        });
+
+        instance.exports.game_init();
+
+        let lastTimestamp = performance.now();
+        function loopCallback(timestamp) {
+          ctx.fillStyle = 'black';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          let delta = (timestamp - lastTimestamp) / 1000.0;
+          instance.exports.game_loop(delta);
+          lastTimestamp = timestamp;
+          requestAnimationFrame(loopCallback);
+        }
+        requestAnimationFrame(loopCallback);
+      })();
+    </script>
+  </body>
+</html>

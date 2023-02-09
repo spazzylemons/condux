@@ -4,6 +4,12 @@ class_name Spline
 const BAKE_MAX_DEPTH = 10
 const BAKE_LENGTH = 1.0
 
+# radius of track - width of track is twice this
+const TRACK_RADIUS = 2.0
+
+# radius used to find up vector by sampling curve
+const FORWARD_VEC_SIZE = 0.125
+
 var _points: Array
 var _controls: Array
 var _baked: Array
@@ -17,7 +23,6 @@ var _total_tilt: float
 # NOTE adjacent points must not be identical, or errors will occur
 func _init(points: Array, tilts: Array):
 	_points = points
-	print(_points)
 	_tilts = []
 	# fix tilts
 	_total_tilt = tilts[0]
@@ -30,7 +35,6 @@ func _init(points: Array, tilts: Array):
 		else:
 			# move down
 			_total_tilt += delta - (2.0 * PI)
-	#print(_tilts)
 	# generate bezier control points
 	_controls = []
 	for i in range(len(points)):
@@ -53,10 +57,6 @@ func _init(points: Array, tilts: Array):
 			_tilt_offsets.append(_length)
 		_offsets.append(_length)
 		_length += _baked[(i + 1) % len(_baked)].distance_to(_baked[i])
-	for i in range(len(_points)):
-		for t in range(10):
-			print(_bezier(i, t / 10.0))
-	#print(_baked)
 
 func _bezier(index: int, offset: float) -> Vector3:
 	var fac_a = (1.0 - offset) * (1.0 - offset)
@@ -142,7 +142,6 @@ func get_tilt(offset: float) -> float:
 	var pre_baked = fmod(offset, _length)
 	offset = _convert_baked_offset(offset)
 	var index = int(offset)
-	#print('offset index ', offset, ' ', index)
 	var a = _lagrange(index + len(_tilts) - 1, pre_baked + _length)
 	var b = _lagrange(index + len(_tilts), pre_baked + _length)
 	offset -= index
@@ -170,3 +169,44 @@ func get_closest(point: Vector3) -> float:
 			nearest = offset + d
 			distance = dist
 	return nearest
+
+func _get_up_and_right_vector(offset: float) -> Array:
+	var sa = fmod(offset - FORWARD_VEC_SIZE + _length, _length)
+	var sb = fmod(offset + FORWARD_VEC_SIZE + _length, _length)
+	var target = (get_baked(sb) - get_baked(sa)).normalized()
+	var look = Transform.IDENTITY.looking_at(target, Vector3.UP)
+	var up = look.xform(Vector3.UP)
+	var right = look.xform(Vector3.RIGHT)
+	var tilt = get_tilt(offset)
+	return [up.rotated(target, tilt), right.rotated(target, tilt)]
+
+func get_up_vector(offset: float) -> Vector3:
+	return _get_up_and_right_vector(offset)[0]
+
+func get_right_vector(offset: float) -> Vector3:
+	return _get_up_and_right_vector(offset)[1]
+
+func get_up_vector_and_height(pos: Vector3) -> Array:
+	var offset = get_closest(pos)
+	var point = get_baked(offset)
+	var up_and_right = _get_up_and_right_vector(offset)
+	var side_distance = up_and_right[1].dot(pos - point)
+	if side_distance < -TRACK_RADIUS or side_distance > TRACK_RADIUS:
+		return []
+	return [up_and_right[0], up_and_right[0].dot(pos - point)]
+
+static func load_from_file(path: String) -> Spline:
+	var f = File.new()
+	f.open(path, File.READ)
+	var n = f.get_8()
+	var points = []
+	var tilts = []
+	for _i in range(n):
+		var l = FileUtils.get_point(f)
+		var c = FileUtils.get_point(f)
+		var r = FileUtils.get_point(f)
+		var t = (f.get_8() / 256.0) * (2.0 * PI)
+		points.append(c)
+		tilts.append(t)
+	f.close()
+	return (load('res://Course/Spline.gd') as GDScript).new(points, tilts)

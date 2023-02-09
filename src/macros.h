@@ -1,0 +1,6 @@
+#ifndef CONDUX_MACROS_H
+#define CONDUX_MACROS_H
+
+#define PI 3.141592653589793115998f
+
+#endif

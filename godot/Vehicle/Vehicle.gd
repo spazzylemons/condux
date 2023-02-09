@@ -14,7 +14,7 @@ const GRAVITY_FALLOFF_POINT = 2.0
 
 const COLLISION_DEPTH = 0.25
 
-var course = null
+var spline = null
 
 var pedals = 0.0
 var velocity = Vector3.ZERO
@@ -59,7 +59,7 @@ func _do_movement(delta: float) -> void:
 	velocity = velocity_without_gravity + gravity_vector
 	# slide with physics
 	translation += velocity * delta
-	var up_height = course.get_up_vector_and_height(translation)
+	var up_height = spline.get_up_vector_and_height(translation)
 	var new_gravity_vector = Vector3.UP
 	if len(up_height) > 0:
 		var up = up_height[0]
@@ -95,11 +95,11 @@ func process_physics(delta: float) -> void:
 	orthonormalize()
 
 # helper function for spawning a vehicle
-static func spawn_basic(vehicle_course, vehicle_type: VehicleType, position: Vector3) -> Vehicle:
+static func spawn_basic(vehicle_spline, vehicle_type: VehicleType, position: Vector3) -> Vehicle:
 	# load from scene
 	var x = load("res://Vehicle/Vehicle.tscn")
 	var vehicle = x.instance()
-	vehicle.course = vehicle_course
+	vehicle.spline = vehicle_spline
 	vehicle.type = vehicle_type
 	# place the vehicle at the given position
 	vehicle.translation = position
