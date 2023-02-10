@@ -2,14 +2,33 @@
 #define CONDUX_PLATFORM_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef CONDUX_WEB
 #define WEB_EXPORT(name) __attribute__((export_name(name)))
 #define WEB_IMPORT(name) __attribute__((import_name(name)))
+#define WEB_PACKED __attribute__((__packed__))
 #else
 #define WEB_EXPORT(name)
 #define WEB_IMPORT(name)
+#define WEB_PACKED
 #endif
+
+#define BTN_UP    (1 << 0)
+#define BTN_DOWN  (1 << 1)
+#define BTN_LEFT  (1 << 2)
+#define BTN_RIGHT (1 << 3)
+#define BTN_OK    (1 << 4)
+#define BTN_BACK  (1 << 5)
+#define BTN_PAUSE (1 << 6)
+
+/**
+ * Controller structure.
+ */
+typedef struct {
+    uint8_t buttons;
+    float steering;
+} Controls;
 
 /**
  * Initializes the platform-specific code.
@@ -57,5 +76,11 @@ int platform_width(void);
  */
 WEB_IMPORT("platform_height")
 int platform_height(void);
+
+/**
+ * Poll the controller.
+ */
+WEB_IMPORT("platform_poll")
+void platform_poll(Controls *controls);
 
 #endif

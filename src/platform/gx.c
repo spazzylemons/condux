@@ -1,8 +1,11 @@
+#include "../macros.h"
 #include "../platform.h"
 
 #include <gccore.h>
 #include <malloc.h>
 #include <string.h>
+#include <wiiuse/wpad.h>
+#include <math.h>
 
 u64 gettime(void);
 u32 diff_usec(u64 start, u64 end);
@@ -18,6 +21,8 @@ static u64 last_time;
 
 void platform_init(int preferred_width, int preferred_height) {
     VIDEO_Init();
+    WPAD_Init();
+    WPAD_SetDataFormat(WPAD_CHAN_ALL, WPAD_FMT_BTNS_ACC_IR);
     screen_mode = VIDEO_GetPreferredMode(NULL);
     backbuffer = MEM_K0_TO_K1(SYS_AllocateFramebuffer(screen_mode));
     VIDEO_Configure(screen_mode);
@@ -111,4 +116,30 @@ int platform_width(void) {
 
 int platform_height(void) {
     return screen_mode->efbHeight;
+}
+
+void platform_poll(Controls *controls) {
+    // TODO if nunchuk inserted, use analog stick for steering
+    WPAD_ScanPads();
+    WPADData *data = WPAD_Data(WPAD_CHAN_0);
+    // rotated for landscape orientation
+    controls->buttons = 0;
+    if (data->btns_h & WPAD_BUTTON_RIGHT) controls->buttons |= BTN_UP;
+    if (data->btns_h & WPAD_BUTTON_LEFT) controls->buttons |= BTN_DOWN;
+    if (data->btns_h & WPAD_BUTTON_UP) controls->buttons |= BTN_LEFT;
+    if (data->btns_h & WPAD_BUTTON_DOWN) controls->buttons |= BTN_RIGHT;
+    if (data->btns_h & WPAD_BUTTON_2) controls->buttons |= BTN_OK;
+    if (data->btns_h & WPAD_BUTTON_1) controls->buttons |= BTN_BACK;
+    if (data->btns_h & WPAD_BUTTON_PLUS) controls->buttons |= BTN_PAUSE;
+    if (data->gforce.y == 0.0f && data->gforce.x == 0.0f) {
+        // atan would not be valid, so use neutral steering
+        controls->steering = 0.0f;
+    } else {
+        // calculate steering based on gforce on remote
+        float angle = atan2f(data->gforce.y, data->gforce.x);
+        float steer = -(2.0f - (2.0f / PI) * fabsf(angle));
+        if (steer < -1.0f) steer = -1.0f;
+        if (angle < 0.0f) steer = -steer;
+        controls->steering = steer;
+    }
 }

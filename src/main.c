@@ -7,6 +7,9 @@
 
 static float angle;
 
+static float lookAngle;
+static Vec lookPos = { 0.0f, 0.0f, 0.0f };
+
 WEB_EXPORT("game_init")
 void game_init(void) {
     angle = 0.0f;
@@ -19,9 +22,39 @@ void game_deinit(void) {
 }
 #endif
 
-WEB_EXPORT("game_loop")
-void game_loop(float delta) {
+static void game_logic(float delta) {
     angle = fmodf(delta + angle, 2.0f * PI);
+    Controls controls;
+    platform_poll(&controls);
+    lookAngle += controls.steering * delta;
+    if (lookAngle > 2.0f * PI) {
+        lookAngle -= 2.0f * PI;
+    } else if (lookAngle < 0.0f) {
+        lookAngle += 2.0f * PI;
+    }
+    Vec lookForwardVec;
+    vec_set(lookForwardVec, sinf(lookAngle), 0.0f, cosf(lookAngle));
+    vec_scale(lookForwardVec, 4.0f * delta);
+    if (controls.buttons & BTN_UP) {
+        vec_add(lookPos, lookForwardVec);
+    } else if (controls.buttons & BTN_DOWN) {
+        vec_sub(lookPos, lookForwardVec);
+    }
+    if (controls.buttons & BTN_BACK) {
+        lookPos[1] -= 4.0f * delta;
+    }
+    if (controls.buttons & BTN_OK) {
+        lookPos[1] += 4.0f * delta;
+    }
+}
+
+static void game_render(void) {
+    // render from this camera position
+    Vec lookForwardVec;
+    vec_set(lookForwardVec, sinf(lookAngle), 0.0f, cosf(lookAngle));
+    vec_add(lookForwardVec, lookPos);
+    set_camera(lookPos, lookForwardVec, gVecYAxis);
+    // render a cube
     Vec lines[8];
     int j = 0;
     float cos_angle = cosf(angle);
@@ -29,14 +62,13 @@ void game_loop(float delta) {
     for (int z = -1; z <= 1; z += 2) {
         for (int y = -1; y <= 1; y += 2) {
             for (int x = -1; x <= 1; x += 2) {
-                float px = 3.0f * x;
-                float py = 3.0f * y;
-                float pz = 20.0f * z;
-                vec_set(lines[j++], px * cos_angle + pz * sin_angle, py, pz * cos_angle - px * sin_angle + 10.0f);
+                float px = x;
+                float py = y;
+                float pz = z;
+                vec_set(lines[j++], px * cos_angle + pz * sin_angle, py, pz * cos_angle - px * sin_angle + 5.0f);
             }
         }
     }
-
     render_line(lines[0], lines[1]);
     render_line(lines[1], lines[3]);
     render_line(lines[3], lines[2]);
@@ -49,6 +81,12 @@ void game_loop(float delta) {
     render_line(lines[1], lines[5]);
     render_line(lines[2], lines[6]);
     render_line(lines[3], lines[7]);
+}
+
+WEB_EXPORT("game_loop")
+void game_loop(float delta) {
+    game_logic(delta);
+    game_render();
 }
 
 #ifndef CONDUX_WEB

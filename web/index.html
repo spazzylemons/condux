@@ -5,6 +5,11 @@
     <title>Condux Web Demo</title>
   </head>
   <body>
+    <div id="gamepad-mapping-note" hidden>
+      A gamepad was found, but did not have the standard gamepad mapping. You
+      may find better compatibility on a Chromium-based browser if you're not
+      already using one.
+    </div>
     <canvas id="canvas"></canvas>
     <script type="module">
       (async () => {
@@ -12,6 +17,8 @@
         const ctx = canvas.getContext('2d');
         const response = await fetch('./index.wasm');
         const bytes = await response.arrayBuffer();
+        const gamepadMappingNote = document.getElementById('gamepad-mapping-note');
+        const keysDown = {};
         const { instance } = await WebAssembly.instantiate(bytes, {
           env: {
             platform_init(preferredWidth, preferredHeight) {
@@ -34,8 +41,63 @@
 
             platform_height() {
               return canvas.height;
-            }
+            },
+
+            platform_poll(ptr) {
+              const buttonsPtr = new Uint8Array(instance.exports.memory.buffer, ptr, 1);
+              const steeringPtr = new Float32Array(instance.exports.memory.buffer, ptr + 4, 1);
+
+              let buttons = 0;
+              let steering = 0;
+
+              let currentGamepad = null;
+              let foundGamepad = false;
+              for (const gamepad of navigator.getGamepads()) {
+                if (gamepad !== null) {
+                  foundGamepad = true;
+                  if (gamepad.mapping === 'standard') {
+                    currentGamepad = gamepad;
+                    break;
+                  }
+                }
+              }
+
+              if ('ArrowUp' in keysDown) buttons |= 1;
+              if ('ArrowDown' in keysDown) buttons |= 2;
+              if ('ArrowLeft' in keysDown) buttons |= 4;
+              if ('ArrowRight' in keysDown) buttons |= 8;
+              if ('x' in keysDown) buttons |= 16;
+              if ('z' in keysDown) buttons |= 32;
+              if ('Escape' in keysDown) buttons |= 64;
+
+              if (currentGamepad !== null) {
+                if (currentGamepad.buttons[12].pressed) buttons |= 1;
+                if (currentGamepad.buttons[13].pressed) buttons |= 2;
+                if (currentGamepad.buttons[14].pressed) buttons |= 4;
+                if (currentGamepad.buttons[15].pressed) buttons |= 8;
+                if (currentGamepad.buttons[1].pressed) buttons |= 16;
+                if (currentGamepad.buttons[0].pressed) buttons |= 32;
+                if (currentGamepad.buttons[9].pressed) buttons |= 64;
+                steering = currentGamepad.axes[0];
+              } else {
+                // if no gamepad connected, use keyboard steering
+                steering = ('ArrowLeft' in keysDown) ? -1 : ('ArrowRight' in keysDown) ? 1 : 0;
+              }
+
+              gamepadMappingNote.hidden = currentGamepad !== null || !foundGamepad;
+
+              buttonsPtr[0] = buttons;
+              steeringPtr[0] = steering;
+            },
           },
+        });
+
+        window.addEventListener('keydown', event => {
+          keysDown[event.key] = true;
+        });
+
+        window.addEventListener('keyup', event => {
+          delete keysDown[event.key];
         });
 
         instance.exports.game_init();
@@ -44,7 +106,7 @@
         function loopCallback(timestamp) {
           ctx.fillStyle = 'black';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          let delta = (timestamp - lastTimestamp) / 1000.0;
+          const delta = (timestamp - lastTimestamp) / 1000.0;
           instance.exports.game_loop(delta);
           lastTimestamp = timestamp;
           requestAnimationFrame(loopCallback);
