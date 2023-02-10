@@ -1,5 +1,5 @@
-#include "../macros.h"
-#include "../platform.h"
+#include "macros.h"
+#include "platform.h"
 
 #include <gccore.h>
 #include <malloc.h>

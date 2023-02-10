@@ -1,4 +1,4 @@
-#include "../platform.h"
+#include "platform.h"
 
 #include <math.h>
 #include <SDL2/SDL.h>

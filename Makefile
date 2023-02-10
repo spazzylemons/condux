@@ -9,7 +9,7 @@ CFILES := \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/render.c
 
-CFLAGS := -Oz -flto
+CFLAGS := -Oz -flto -Iinclude
 
 CC := gcc
 
