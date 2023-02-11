@@ -1,19 +1,27 @@
 #include <math.h>
 
+#include "assets.h"
 #include "linalg.h"
 #include "macros.h"
 #include "platform.h"
 #include "render.h"
+#include "spline.h"
 
 static float angle;
 
 static float lookAngle;
 static Vec lookPos = { 0.0f, 0.0f, 0.0f };
+static Spline s;
+static bool has_spline = false;
 
 WEB_EXPORT("game_init")
 void game_init(void) {
     angle = 0.0f;
     platform_init(640, 480);
+    Asset asset;
+    if (asset_load(&asset, "course_test1.bin")) {
+        has_spline = spline_load(&s, &asset);
+    }
 }
 
 #ifndef CONDUX_WEB
@@ -81,6 +89,9 @@ static void game_render(void) {
     render_line(lines[1], lines[5]);
     render_line(lines[2], lines[6]);
     render_line(lines[3], lines[7]);
+    if (has_spline) {
+        spline_test_render(&s);
+    }
 }
 
 WEB_EXPORT("game_loop")

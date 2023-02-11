@@ -5,11 +5,13 @@ BUILDDIR := build
 SRCDIR := src
 
 CFILES := \
+	$(SRCDIR)/assets.c \
 	$(SRCDIR)/linalg.c \
 	$(SRCDIR)/main.c \
-	$(SRCDIR)/render.c
+	$(SRCDIR)/render.c \
+	$(SRCDIR)/spline.c
 
-CFLAGS := -Oz -flto -Iinclude
+CFLAGS := -Oz -flto -Iinclude -Ibuild
 
 CC := gcc
 
@@ -20,7 +22,7 @@ PLATFORM ?= sdl
 ERR =
 
 ifeq ($(PLATFORM), sdl)
-	LDFLAGS += -lSDL2
+	LDFLAGS += -lSDL2 -lGL
 	CFILES += $(SRCDIR)/platform/sdl.c
 else ifeq ($(PLATFORM), web)
 	# TODO more portable
@@ -84,6 +86,12 @@ all: $(TARGET)
 
 %.dol: %.elf
 	elf2dol $< $@
+
+$(BUILDDIR)/assets.o: $(BUILDDIR)/bundle.h
+
+$(BUILDDIR)/bundle.h: $(wildcard assets/*)
+	mkdir -p $(dir $@)
+	python scripts/asset_bundler.py
 
 $(BINARY): $(OFILES)
 	$(CC) $(CFLAGS) -o $@ $(OFILES) $(LDFLAGS)

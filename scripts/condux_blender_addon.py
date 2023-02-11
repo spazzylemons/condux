@@ -34,9 +34,7 @@ class BezierExport(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
                 file.write(bytes([len(points)]))
                 # iterate over the points in the curve - export them as 8.8
                 for point in points:
-                    write_co(file, point.handle_left)
                     write_co(file, point.co)
-                    write_co(file, point.handle_right)
                     file.write(bytes([int(256 * ((point.tilt % (2 * math.pi)) / (2 * math.pi)))]))
         except BaseException as e:
             self.report({'ERROR'}, repr(e))

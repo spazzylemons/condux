@@ -3,9 +3,11 @@
 #include <math.h>
 #include <SDL2/SDL.h>
 
+#include <GL/gl.h>
+
 static int screen_width, screen_height;
 static SDL_Window *window;
-static SDL_Renderer *renderer;
+static SDL_GLContext gl_context;
 static Uint64 last_time_ms = 0;
 static bool should_run = true;
 
@@ -24,6 +26,8 @@ static SDL_Keycode keyboard_mapping[7] = {
 static SDL_GameController *controller = NULL;
 
 void platform_init(int preferred_width, int preferred_height) {
+    screen_width = preferred_width;
+    screen_height = preferred_height;
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER)) {
         // failed to initialize platform
         abort();
@@ -35,7 +39,7 @@ void platform_init(int preferred_width, int preferred_height) {
         SDL_WINDOWPOS_CENTERED,
         preferred_width,
         preferred_height,
-        0
+        SDL_WINDOW_OPENGL
     );
     if (!window) {
         // failed to create window
@@ -43,13 +47,8 @@ void platform_init(int preferred_width, int preferred_height) {
         abort();
     }
 
-    renderer = SDL_CreateRenderer(
-        window,
-        -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
-    );
-    if (!renderer) {
-        // failed to create renderer
+    gl_context = SDL_GL_CreateContext(window);
+    if (!gl_context) {
         SDL_DestroyWindow(window);
         SDL_Quit();
         abort();
@@ -64,14 +63,18 @@ void platform_deinit(void) {
     SDL_Quit();
 }
 
+static void point(float x, float y) {
+    // convert to [-1, 1]
+    x /= screen_width / 2.0f;
+    x -= 1.0f;
+    y /= screen_height / 2.0f;
+    y -= 1.0f;
+    glVertex2f(x, y);
+}
+
 void platform_line(float x0, float y0, float x1, float y1) {
-    SDL_RenderDrawLine(
-        renderer,
-        roundf(x0),
-        roundf(y0),
-        roundf(x1),
-        roundf(y1)
-    );
+    point(x0, y0);
+    point(x1, y1);
 }
 
 bool platform_should_run(void) {
@@ -80,10 +83,12 @@ bool platform_should_run(void) {
 
 float platform_start_frame(void) {
     // clear black
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
     // set to white for lines
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    // we start drawing GL primitives
+    glBegin(GL_LINES);
     // get frame time
     Uint64 now = SDL_GetTicks64();
     float result = (now - last_time_ms) / 1000.0f;
@@ -92,8 +97,10 @@ float platform_start_frame(void) {
 }
 
 void platform_end_frame(void) {
+    // finish drawing lines
+    glEnd();
     // present the window
-    SDL_RenderPresent(renderer);
+    SDL_GL_SwapWindow(window);
     // accept events
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -117,7 +124,7 @@ void platform_end_frame(void) {
         }
     }
     // update dimensions
-    SDL_GetRendererOutputSize(renderer, &screen_width, &screen_height);
+    SDL_GL_GetDrawableSize(window, &screen_width, &screen_height);
 }
 
 int platform_width(void) {
