@@ -16,12 +16,10 @@ static Mtx camera_mtx = {
 };
 
 void set_camera(const Vec eye, const Vec at, const Vec up) {
-    vec_copy(camera_mtx[2], at);
-    vec_sub(camera_mtx[2], eye);
-    vec_normalize(camera_mtx[2]);
-    vec_cross(camera_mtx[0], up, camera_mtx[2]);
-    vec_normalize(camera_mtx[0]);
-    vec_cross(camera_mtx[1], camera_mtx[2], camera_mtx[0]);
+    Vec delta;
+    vec_copy(delta, eye);
+    vec_sub(delta, at);
+    mtx_look_at(camera_mtx, delta, up);
     mtx_transpose(camera_mtx);
     vec_copy(camera_pos, eye);
 }

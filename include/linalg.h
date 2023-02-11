@@ -20,7 +20,13 @@ float vec_dot(const Vec a, const Vec b);
 float vec_magnitude_sq(const Vec v);
 float vec_distance_sq(const Vec a, const Vec b);
 
+extern const Mtx gMtxIdentity;
+
+void mtx_copy(Mtx dst, const Mtx src);
 void mtx_transpose(Mtx m);
+void mtx_look_at(Mtx m, const Vec at, const Vec up);
+void mtx_angle_axis(Mtx m, const Vec axis, float angle);
+void mtx_mul(Mtx dst, const Mtx a, const Mtx b);
 void mtx_mul_vec(const Mtx m, Vec dst, const Vec src);
 
 #endif

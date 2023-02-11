@@ -39,7 +39,7 @@ void platform_init(int preferred_width, int preferred_height) {
         SDL_WINDOWPOS_CENTERED,
         preferred_width,
         preferred_height,
-        SDL_WINDOW_OPENGL
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
     );
     if (!window) {
         // failed to create window
@@ -53,6 +53,9 @@ void platform_init(int preferred_width, int preferred_height) {
         SDL_Quit();
         abort();
     }
+
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glColor3f(1.0f, 1.0f, 1.0f);
 }
 
 void platform_deinit(void) {
@@ -68,7 +71,7 @@ static void point(float x, float y) {
     x /= screen_width / 2.0f;
     x -= 1.0f;
     y /= screen_height / 2.0f;
-    y -= 1.0f;
+    y = 1.0f - y; // flip y axis
     glVertex2f(x, y);
 }
 
@@ -82,11 +85,7 @@ bool platform_should_run(void) {
 }
 
 float platform_start_frame(void) {
-    // clear black
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    // set to white for lines
-    glColor3f(1.0f, 1.0f, 1.0f);
     // we start drawing GL primitives
     glBegin(GL_LINES);
     // get frame time
@@ -109,6 +108,8 @@ void platform_end_frame(void) {
             if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
                 // window close
                 should_run = false;
+            } else if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                glViewport(0, 0, event.window.data1, event.window.data2);
             }
         } else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
             for (int i = 0; i < 7; i++) {

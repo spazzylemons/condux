@@ -202,9 +202,7 @@ static func load_from_file(path: String) -> Spline:
 	var points = []
 	var tilts = []
 	for _i in range(n):
-		var l = FileUtils.get_point(f)
 		var c = FileUtils.get_point(f)
-		var r = FileUtils.get_point(f)
 		var t = (f.get_8() / 256.0) * (2.0 * PI)
 		points.append(c)
 		tilts.append(t)

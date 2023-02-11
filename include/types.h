@@ -11,7 +11,14 @@ typedef struct {
     Vec point;
     Vec control;
     float tilt;
+    float tiltOffset;
 } SplinePoint;
+
+typedef struct {
+    Vec point;
+    float position;
+    float offset;
+} SplineBaked;
 
 typedef struct {
     const char *name;
@@ -29,10 +36,16 @@ typedef struct {
 typedef struct {
     /** The number of control points on the spline. */
     uint8_t numPoints;
+    /** The number of baked points on the spline. */
+    size_t numBaked;
     /** The total tilt, used for interpolation. */
     float totalTilt;
+    /** The approximate length of the spline. */
+    float length;
     /** The control points. */
     SplinePoint points[MAX_POINTS];
+    /** The baked points. */
+    SplineBaked *baked;
 } Spline;
 
 #endif
