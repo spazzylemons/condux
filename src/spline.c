@@ -119,6 +119,65 @@ static void bake(Spline *spline) {
     spline->length += sqrtf(vec_distance_sq(spline->baked[0].point, spline->baked[spline->numBaked - 1].point));
 }
 
+static void generate_controls(Spline *spline) {
+    // generate bezier control points
+    for (int a = 0; a < spline->numPoints; a++) {
+        int b = (a + 1) % spline->numPoints;
+        int c = (a + 2) % spline->numPoints;
+        float da = sqrtf(vec_distance_sq(spline->points[a].point, spline->points[b].point));
+        float db = sqrtf(vec_distance_sq(spline->points[b].point, spline->points[c].point));
+        // TODO handle potential divs by zero in this area
+        float mid = da / (da + db);
+        float fac_a = (mid - 1.0f) / (2.0f * mid);
+        float fac_b = (1.0f) / (2.0f * mid * (1.0f - mid));
+        float fac_c = mid / (2.0f * (mid - 1.0f));
+        Vec temp;
+        vec_copy(spline->points[a].control, spline->points[a].point);
+        vec_scale(spline->points[a].control, fac_a);
+        vec_copy(temp, spline->points[b].point);
+        vec_scale(temp, fac_b);
+        vec_add(spline->points[a].control, temp);
+        vec_copy(temp, spline->points[c].point);
+        vec_scale(temp, fac_c);
+        vec_add(spline->points[a].control, temp);
+    }
+}
+
+static bool bake_points(Spline *spline) {
+    // first bake pass to see how many points we need
+    find_baked_size(spline);
+    // allocate memory for baked points
+    spline->baked = malloc(sizeof(SplineBaked) * spline->numBaked);
+    if (!spline->baked) return false;
+    // bake points
+    bake(spline);
+    return true;
+}
+
+static void temp_generate_render(Spline *spline) {
+    // temporary for displaying spline
+    size_t n = 2.0f + spline->length;
+    tempPointsLeft = malloc(sizeof(Vec) * n);
+    tempPointsRight = malloc(sizeof(Vec) * n);
+    float d = 0.0f;
+    size_t index = 0;
+    while (d < spline->length) {
+        Vec p, r;
+        spline_get_baked(spline, d, p);
+        spline_get_up_right(spline, d, NULL, r);
+        vec_scale(r, SPLINE_TRACK_RADIUS);
+        vec_copy(tempPointsLeft[index], p);
+        vec_sub(tempPointsLeft[index], r);
+        vec_copy(tempPointsRight[index], p);
+        vec_add(tempPointsRight[index], r);
+        ++index;
+        d += 1.0f;
+    }
+    vec_copy(tempPointsLeft[index], tempPointsLeft[0]);
+    vec_copy(tempPointsRight[index], tempPointsRight[0]);
+    numTempPoints = index + 1;
+}
+
 bool spline_load(Spline *spline, Asset *asset) {
     // number of points
     if (!asset_read_byte(asset, &spline->numPoints)) return false;
@@ -143,55 +202,10 @@ bool spline_load(Spline *spline, Asset *asset) {
             spline->totalTilt += delta - (2.0f * PI);
         }
     }
-    // generate bezier control points
-    for (int a = 0; a < spline->numPoints; a++) {
-        int b = (a + 1) % spline->numPoints;
-        int c = (a + 2) % spline->numPoints;
-        float da = sqrtf(vec_distance_sq(spline->points[a].point, spline->points[b].point));
-        float db = sqrtf(vec_distance_sq(spline->points[b].point, spline->points[c].point));
-        // TODO handle potential divs by zero in this area
-        float mid = da / (da + db);
-        float fac_a = (mid - 1.0f) / (2.0f * mid);
-        float fac_b = (1.0f) / (2.0f * mid * (1.0f - mid));
-        float fac_c = mid / (2.0f * (mid - 1.0f));
-        Vec temp;
-        vec_copy(spline->points[a].control, spline->points[a].point);
-        vec_scale(spline->points[a].control, fac_a);
-        vec_copy(temp, spline->points[b].point);
-        vec_scale(temp, fac_b);
-        vec_add(spline->points[a].control, temp);
-        vec_copy(temp, spline->points[c].point);
-        vec_scale(temp, fac_c);
-        vec_add(spline->points[a].control, temp);
-    }
-    // first bake pass to see how many points we need
-    find_baked_size(spline);
-    // allocate memory for baked points
-    spline->baked = malloc(sizeof(SplineBaked) * spline->numBaked);
-    if (!spline->baked) return false;
-    // bake points
-    bake(spline);
-    // temporary for displaying spline
-    size_t n = 2.0f + spline->length;
-    tempPointsLeft = malloc(sizeof(Vec) * n);
-    tempPointsRight = malloc(sizeof(Vec) * n);
-    float d = 0.0f;
-    size_t index = 0;
-    while (d < spline->length) {
-        Vec p, r;
-        spline_get_baked(spline, d, p);
-        spline_get_up_right(spline, d, NULL, r);
-        vec_scale(r, SPLINE_TRACK_RADIUS);
-        vec_copy(tempPointsLeft[index], p);
-        vec_sub(tempPointsLeft[index], r);
-        vec_copy(tempPointsRight[index], p);
-        vec_add(tempPointsRight[index], r);
-        ++index;
-        d += 1.0f;
-    }
-    vec_copy(tempPointsLeft[index], tempPointsLeft[0]);
-    vec_copy(tempPointsRight[index], tempPointsRight[0]);
-    numTempPoints = index + 1;
+    generate_controls(spline);
+    if (!bake_points(spline)) return false;
+    temp_generate_render(spline);
+    size_t w = 0;
     return true;
 }
 

@@ -48,4 +48,26 @@ typedef struct {
     SplineBaked *baked;
 } Spline;
 
+typedef struct QuadTreeSegment {
+    struct QuadTreeSegment *next;
+} QuadTreeSegment;
+
+typedef struct QuadTreeNode {
+    QuadTreeSegment *minXSegments;
+    QuadTreeSegment *minZSegments;
+    QuadTreeSegment *maxXSegments;
+    QuadTreeSegment *maxZSegments;
+    QuadTreeSegment *midSegments;
+    struct QuadTreeNode *children;
+} QuadTreeNode;
+
+typedef struct {
+    float minX, minZ, maxX, maxZ;
+
+    QuadTreeNode root;
+    QuadTreeNode childPool[4 + 16 + 64];
+
+    QuadTreeSegment *segmentPool;
+} QuadTree;
+
 #endif

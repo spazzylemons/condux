@@ -6,6 +6,7 @@ SRCDIR := src
 
 CFILES := \
 	$(SRCDIR)/assets.c \
+	$(SRCDIR)/collision.c \
 	$(SRCDIR)/linalg.c \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/render.c \
@@ -77,7 +78,6 @@ DFILES := $(CFILES:$(SRCDIR)/%.c=$(BUILDDIR)/%.d)
 $(ERR)
 
 .PHONY: all clean
-NODEPS := clean
 
 all: $(TARGET)
 
@@ -88,6 +88,7 @@ all: $(TARGET)
 	elf2dol $< $@
 
 $(BUILDDIR)/assets.o: $(BUILDDIR)/bundle.h
+$(BUILDDIR)/assets.d: $(BUILDDIR)/bundle.h
 
 $(BUILDDIR)/bundle.h: $(wildcard assets/*)
 	mkdir -p $(dir $@)
@@ -107,6 +108,6 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 clean:
 	rm -rf $(BUILDDIR) $(TARGET) $(BINARY)
 
-ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
-	-include $(DFILES)
+ifeq (,$(filter clean,$(MAKECMDGOALS)))
+-include $(DFILES)
 endif

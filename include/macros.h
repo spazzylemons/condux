@@ -5,4 +5,8 @@
 
 #define SPLINE_TRACK_RADIUS 2.0f
 
+#define MAX_GRAVITY_HEIGHT 5.0f
+
+#define COLLISION_DEPTH 0.25f
+
 #endif

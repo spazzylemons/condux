@@ -1,6 +1,7 @@
 #include <math.h>
 
 #include "assets.h"
+#include "collision.h"
 #include "linalg.h"
 #include "macros.h"
 #include "platform.h"
@@ -10,7 +11,9 @@
 static float lookAngle;
 static Vec lookPos = { 0.0f, 0.0f, 0.0f };
 static Spline s;
+static QuadTree tree;
 static bool has_spline = false;
+static bool has_quad_tree = false;
 
 WEB_EXPORT("game_init")
 void game_init(void) {
@@ -18,6 +21,9 @@ void game_init(void) {
     Asset asset;
     if (asset_load(&asset, "course_test1.bin")) {
         has_spline = spline_load(&s, &asset);
+        if (has_spline) {
+            has_quad_tree = quad_tree_init(&tree, &s);
+        }
     }
 }
 
@@ -25,6 +31,9 @@ void game_init(void) {
 void game_deinit(void) {
     if (has_spline) {
         spline_free(&s);
+        if (has_quad_tree) {
+            quad_tree_free(&tree);
+        }
     }
     platform_deinit();
 }
@@ -52,6 +61,9 @@ static void game_logic(float delta) {
     }
     if (controls.buttons & BTN_OK) {
         lookPos[1] += 4.0f * delta;
+    }
+    if (has_quad_tree) {
+        quad_tree_test_print_colliding(&tree, lookPos[0], lookPos[2]);
     }
 }
 
