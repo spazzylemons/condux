@@ -61,6 +61,8 @@ typedef struct {
 } Vehicle;
 
 #define MAX_POINTS 64
+#define MAX_BAKE_DEPTH 5
+#define MAX_BAKED_POINTS (MAX_POINTS * (1 << MAX_BAKE_DEPTH))
 
 typedef struct {
     /** The number of control points on the spline. */
@@ -74,7 +76,7 @@ typedef struct {
     /** The control points. */
     SplinePoint points[MAX_POINTS];
     /** The baked points. */
-    SplineBaked *baked;
+    SplineBaked baked[MAX_BAKED_POINTS];
 } Spline;
 
 typedef struct QuadTreeSegment {
@@ -96,7 +98,7 @@ typedef struct {
     QuadTreeNode root;
     QuadTreeNode childPool[4 + 16 + 64];
 
-    QuadTreeSegment *segmentPool;
+    QuadTreeSegment segmentPool[MAX_BAKED_POINTS];
 } QuadTree;
 
 #endif

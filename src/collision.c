@@ -5,7 +5,6 @@
 #include "render.h"
 
 #include <math.h>
-#include <stdlib.h>
 
 #define QUAD_TREE_MAX_DEPTH 3
 
@@ -133,9 +132,6 @@ static void add_node(QuadTree *tree, const float *dims, QuadTreeSegment *segment
 }
 
 bool quad_tree_init(QuadTree *tree, const Spline *spline) {
-    // allocate segments
-    tree->segmentPool = malloc(sizeof(QuadTreeSegment) * spline->numBaked);
-    if (!tree->segmentPool) return false;
     // decide bounds of quadtree
     tree->minX = INFINITY;
     tree->minZ = INFINITY;
@@ -162,8 +158,4 @@ bool quad_tree_init(QuadTree *tree, const Spline *spline) {
     }
     // for testing, print out the current tree
     return true;
-}
-
-void quad_tree_free(const QuadTree *tree) {
-    free(tree->segmentPool);
 }

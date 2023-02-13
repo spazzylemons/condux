@@ -38,6 +38,7 @@ void game_init(void) {
     Asset asset;
     if (asset_load(&asset, "course_test1.bin")) {
         has_spline = spline_load(&s, &asset);
+        render_load_spline(&s);
         if (has_spline) {
             has_quad_tree = quad_tree_init(&tree, &s);
             spline_get_baked(&s, 0.0f, vehicle.position);
@@ -52,12 +53,7 @@ void game_init(void) {
 
 #ifndef CONDUX_WEB
 void game_deinit(void) {
-    if (has_spline) {
-        spline_free(&s);
-        if (has_quad_tree) {
-            quad_tree_free(&tree);
-        }
-    }
+    render_deinit();
     platform_deinit();
 }
 #endif
@@ -108,9 +104,7 @@ static void game_render(void) {
         vec_add(q2, vehicle.position);
         render_line(q1, q2);
     }
-    if (has_spline) {
-        spline_test_render(&s);
-    }
+    render_spline();
 }
 
 WEB_EXPORT("game_loop")

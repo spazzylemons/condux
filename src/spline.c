@@ -8,11 +8,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-static Vec *tempPointsLeft;
-static Vec *tempPointsRight;
-static size_t numTempPoints;
-
-#define MAX_BAKE_DEPTH 10
 #define BAKE_LENGTH_SQ 1.0f
 
 #define FORWARD_VEC_SIZE 0.125f
@@ -147,36 +142,9 @@ static void generate_controls(Spline *spline) {
 static bool bake_points(Spline *spline) {
     // first bake pass to see how many points we need
     find_baked_size(spline);
-    // allocate memory for baked points
-    spline->baked = malloc(sizeof(SplineBaked) * spline->numBaked);
-    if (!spline->baked) return false;
     // bake points
     bake(spline);
     return true;
-}
-
-static void temp_generate_render(Spline *spline) {
-    // temporary for displaying spline
-    size_t n = 2.0f + spline->length;
-    tempPointsLeft = malloc(sizeof(Vec) * n);
-    tempPointsRight = malloc(sizeof(Vec) * n);
-    float d = 0.0f;
-    size_t index = 0;
-    while (d < spline->length) {
-        Vec p, r;
-        spline_get_baked(spline, d, p);
-        spline_get_up_right(spline, d, NULL, r);
-        vec_scale(r, SPLINE_TRACK_RADIUS);
-        vec_copy(tempPointsLeft[index], p);
-        vec_sub(tempPointsLeft[index], r);
-        vec_copy(tempPointsRight[index], p);
-        vec_add(tempPointsRight[index], r);
-        ++index;
-        d += 1.0f;
-    }
-    vec_copy(tempPointsLeft[index], tempPointsLeft[0]);
-    vec_copy(tempPointsRight[index], tempPointsRight[0]);
-    numTempPoints = index + 1;
 }
 
 bool spline_load(Spline *spline, Asset *asset) {
@@ -205,12 +173,7 @@ bool spline_load(Spline *spline, Asset *asset) {
     }
     generate_controls(spline);
     if (!bake_points(spline)) return false;
-    temp_generate_render(spline);
     return true;
-}
-
-void spline_free(const Spline *spline) {
-    free(spline->baked);
 }
 
 static float convert_baked_offset(const Spline *spline, float baked_offset) {
@@ -397,12 +360,4 @@ bool spline_get_up_height(const Spline *spline, const QuadTree *tree, const Vec 
     }
     *height = vec_dot(up, d);
     return true;
-}
-
-void spline_test_render(Spline *spline) {
-    for (int i = 0; i < numTempPoints - 1; i++) {
-        render_line(tempPointsLeft[i], tempPointsLeft[i + 1]);
-        render_line(tempPointsRight[i], tempPointsRight[i + 1]);
-        render_line(tempPointsLeft[i], tempPointsRight[i]);
-    }
 }
