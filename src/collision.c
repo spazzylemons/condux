@@ -6,24 +6,24 @@
 
 #include <math.h>
 
-#define QUAD_TREE_MAX_DEPTH 3
+#define MAX_DEPTH 3
 
-static void check_bounds(const Vec v, float *dims) {
-    if (v[0] < dims[0]) dims[0] = v[0];
-    if (v[2] < dims[1]) dims[1] = v[2];
-    if (v[0] > dims[2]) dims[2] = v[0];
-    if (v[2] > dims[3]) dims[3] = v[2];
+static void check_bounds(const Vec v, Vec min, Vec max) {
+    if (v[0] < min[0]) min[0] = v[0];
+    if (v[1] < min[1]) min[1] = v[1];
+    if (v[2] < min[2]) min[2] = v[2];
+    if (v[0] > max[0]) max[0] = v[0];
+    if (v[1] > max[1]) max[1] = v[1];
+    if (v[2] > max[2]) max[2] = v[2];
 }
 
-static void get_bounds(const Spline *spline, size_t i, float *dims) {
+static void get_bounds(const Spline *spline, size_t i, Vec min, Vec max) {
     const SplineBaked *baked[2];
     baked[0] = &spline->baked[i];
     baked[1] = &spline->baked[(i + 1) % spline->numBaked];
     Vec tmp, up, right, point, above, below;
-    dims[0] = INFINITY;
-    dims[1] = INFINITY;
-    dims[2] = -INFINITY;
-    dims[3] = -INFINITY;
+    vec_set(min, INFINITY, INFINITY, INFINITY);
+    vec_set(max, -INFINITY, -INFINITY, -INFINITY);
     for (int j = 0; j < 2; j++) {
         vec_copy(point, baked[j]->point);
         spline_get_up_right(spline, baked[j]->offset, up, right);
@@ -35,127 +35,100 @@ static void get_bounds(const Spline *spline, size_t i, float *dims) {
         vec_copy(tmp, above);
         vec_sub(tmp, right);
         vec_add(tmp, point);
-        check_bounds(tmp, dims);
+        check_bounds(tmp, min, max);
         vec_copy(tmp, above);
         vec_add(tmp, right);
         vec_add(tmp, point);
-        check_bounds(tmp, dims);
+        check_bounds(tmp, min, max);
         vec_copy(tmp, below);
         vec_sub(tmp, right);
         vec_add(tmp, point);
-        check_bounds(tmp, dims);
+        check_bounds(tmp, min, max);
         vec_copy(tmp, below);
         vec_add(tmp, right);
         vec_add(tmp, point);
-        check_bounds(tmp, dims);
+        check_bounds(tmp, min, max);
     }
 }
 
-static void build_quad_tree(QuadTreeNode *node, QuadTreeNode *childPool, int depth, size_t *w) {
+static void build_octree(OctreeNode *node, OctreeNode *childPool, int depth, size_t *w) {
     // set segments to empty list
-    node->minXSegments = NULL;
-    node->minZSegments = NULL;
-    node->maxXSegments = NULL;
-    node->maxZSegments = NULL;
-    node->midSegments = NULL;
-    if (depth >= QUAD_TREE_MAX_DEPTH) {
+    node->segments = -1;
+    if (depth >= MAX_DEPTH) {
         // if at max depth, we don't add children
         node->children = NULL;
         return;
     }
     // add children
     node->children = &childPool[*w];
-    *w += 4;
-    for (int i = 0; i < 4; i++) {
-        build_quad_tree(&node->children[i], childPool, depth + 1, w);
+    *w += 8;
+    for (int i = 0; i < 8; i++) {
+        build_octree(&node->children[i], childPool, depth + 1, w);
     }
 }
 
-static void add_node(QuadTree *tree, const float *dims, QuadTreeSegment *segment) {
-    float min_x = tree->minX;
-    float min_z = tree->minZ;
-    float max_x = tree->maxX;
-    float max_z = tree->maxZ;
+static void add_node(Octree *tree, const Vec segment_min, const Vec segment_max, int segment) {
+    Vec min, max;
+    vec_copy(min, tree->min);
+    vec_copy(max, tree->max);
 
-    QuadTreeNode *current = &tree->root;
-    int which_x, which_z;
+    OctreeNode *current = &tree->root;
+    int which[3];
     for (;;) {
-        float center_x = (min_x + max_x) * 0.5f;
-        float center_z = (min_z + max_z) * 0.5f;
+        Vec center;
+        vec_copy(center, min);
+        vec_add(center, max);
+        vec_scale(center, 0.5f);
 
-        if (dims[0] < center_x && dims[2] < center_x) {
-            which_x = 0;
-            max_x = center_x;
-        } else if (dims[0] > center_x && dims[2] > center_x) {
-            which_x = 1;
-            min_x = center_x;
-        } else {
-            which_x = -1;
+        for (int i = 0; i < 3; i++) {
+            if (segment_min[i] < center[i] && segment_max[i] < center[i]) {
+                which[i] = 0;
+                max[i] = center[i];
+            } else if (segment_min[i] > center[i] && segment_max[i] > center[i]) {
+                which[i] = 1;
+                min[i] = center[i];
+            } else {
+                which[i] = -1;
+            }
         }
 
-        if (dims[1] < center_z && dims[3] < center_z) {
-            which_z = 0;
-            max_z = center_z;
-        } else if (dims[1] > center_z && dims[3] > center_z) {
-            which_z = 1;
-            min_z = center_z;
-        } else {
-            which_z = -1;
-        }
-
-        if (which_x < 0 || which_z < 0) {
+        if (which[0] < 0 || which[1] < 0 || which[2] < 0 || current->children == NULL) {
             break;
         }
 
-        if (current->children == NULL) {
-            break;
-        }
-        current = &current->children[which_x | (which_z << 1)];
+        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
     }
     // add to list
-    if (which_x == 0 && which_z == -1) {
-        segment->next = current->minXSegments;
-        current->minXSegments = segment;
-    } else if (which_x == 1 && which_z == -1) {
-        segment->next = current->maxXSegments;
-        current->maxXSegments = segment;
-    } else if (which_x == -1 && which_z == 0) {
-        segment->next = current->minZSegments;
-        current->minZSegments = segment;
-    } else if (which_x == -1 && which_z == 1) {
-        segment->next = current->maxZSegments;
-        current->maxZSegments = segment;
-    } else {
-        segment->next = current->midSegments;
-        current->midSegments = segment;
+    for (int i = 0; i < 3; i++) {
+        if (which[i] == 0) {
+            tree->segmentSides[segment] |= (1 << (2 * i));
+        } else if (which[i] == 1) {
+            tree->segmentSides[segment] |= (1 << ((2 * i) + 1));
+        }
     }
+    tree->segmentNext[segment] = current->segments;
+    current->segments = segment;
 }
 
-bool quad_tree_init(QuadTree *tree, const Spline *spline) {
-    // decide bounds of quadtree
-    tree->minX = INFINITY;
-    tree->minZ = INFINITY;
-    tree->maxX = -INFINITY;
-    tree->maxZ = -INFINITY;
+void octree_init(Octree *tree, const Spline *spline) {
+    // decide bounds
+    vec_set(tree->min, INFINITY, INFINITY, INFINITY);
+    vec_set(tree->max, -INFINITY, -INFINITY, -INFINITY);
     for (int i = 0; i < spline->numBaked; i++) {
         // get bounds of segment
-        float dims[4];
-        get_bounds(spline, i, dims);
+        Vec min, max;
+        get_bounds(spline, i, min, max);
         // update bounds
-        if (dims[0] < tree->minX) tree->minX = dims[0];
-        if (dims[1] < tree->minZ) tree->minZ = dims[1];
-        if (dims[2] > tree->maxX) tree->maxX = dims[2];
-        if (dims[3] > tree->maxZ) tree->maxZ = dims[3];
+        check_bounds(min, tree->min, tree->max);
+        check_bounds(max, tree->min, tree->max);
     }
-    // build quadtree structure
+    // build structure
     size_t w = 0;
-    build_quad_tree(&tree->root, tree->childPool, 0, &w);
+    build_octree(&tree->root, tree->childPool, 0, &w);
     // for each segment, figure out where to put it
     for (int i = 0; i < spline->numBaked; i++) {
-        float dims[4];
-        get_bounds(spline, i, dims);
-        add_node(tree, dims, &tree->segmentPool[i]);
+        Vec min, max;
+        get_bounds(spline, i, min, max);
+        add_node(tree, min, max, i);
     }
-    // for testing, print out the current tree
-    return true;
 }

@@ -81,7 +81,7 @@ static void approach_aligned_without_gravity(Vehicle *vehicle, const Vec forward
     }
 }
 
-static void collide_with_spline(Vehicle *vehicle, const Spline *spline, const QuadTree *tree, const Vec without_gravity, float delta, Vec new_gravity_vector) {
+static void collide_with_spline(Vehicle *vehicle, const Spline *spline, const Octree *tree, const Vec without_gravity, float delta, Vec new_gravity_vector) {
     Vec collision_up, tmp;
     float height;
     vec_copy(new_gravity_vector, gVecYAxis);
@@ -127,7 +127,7 @@ static void apply_acceleration_no_speed_cap(Vehicle *vehicle, Vec without_gravit
     vec_add(without_gravity, tmp);
 }
 
-void vehicle_update(Vehicle *vehicle, const Spline *spline, const QuadTree *tree, float delta) {
+void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree, float delta) {
     handle_steering(vehicle, delta);
     // apply gravity
     Vec up;

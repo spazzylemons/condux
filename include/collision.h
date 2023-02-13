@@ -5,10 +5,8 @@
 
 #include <stdbool.h>
 
-bool quad_tree_init(QuadTree *tree, const Spline *spline);
+void octree_init(Octree *tree, const Spline *spline);
 
-void quad_tree_free(const QuadTree *tree);
-
-void quad_tree_test_print_colliding(const QuadTree *tree, float x, float z);
+void octree_free(const Octree *tree);
 
 #endif

@@ -80,27 +80,20 @@ typedef struct {
     SplineBaked baked[MAX_BAKED_POINTS];
 } Spline;
 
-typedef struct QuadTreeSegment {
-    struct QuadTreeSegment *next;
-} QuadTreeSegment;
-
-typedef struct QuadTreeNode {
-    QuadTreeSegment *minXSegments;
-    QuadTreeSegment *minZSegments;
-    QuadTreeSegment *maxXSegments;
-    QuadTreeSegment *maxZSegments;
-    QuadTreeSegment *midSegments;
-    struct QuadTreeNode *children;
-} QuadTreeNode;
+typedef struct OctreeNode {
+    int segments;
+    struct OctreeNode *children;
+} OctreeNode;
 
 typedef struct {
-    float minX, minZ, maxX, maxZ;
+    Vec min, max;
 
-    QuadTreeNode root;
-    QuadTreeNode childPool[4 + 16 + 64];
+    OctreeNode root;
+    OctreeNode childPool[8 + 64 + 512];
 
-    QuadTreeSegment segmentPool[MAX_BAKED_POINTS];
-} QuadTree;
+    int segmentNext[MAX_BAKED_POINTS];
+    uint8_t segmentSides[MAX_BAKED_POINTS];
+} Octree;
 
 #define MAX_MESH_VERTICES 32
 #define MAX_MESH_LINES 64

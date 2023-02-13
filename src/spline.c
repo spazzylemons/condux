@@ -6,7 +6,6 @@
 #include "spline.h"
 
 #include <math.h>
-#include <stdlib.h>
 
 #define BAKE_LENGTH_SQ 1.0f
 
@@ -283,69 +282,59 @@ static void get_distance(const Spline *spline, const Vec point, int i, float *di
     }
 }
 
-static int get_segment_id(const QuadTree *tree, const QuadTreeSegment *segment) {
-    return ((uintptr_t) segment - (uintptr_t) tree->segmentPool) / sizeof(QuadTreeSegment);
-}
+static float get_closest(const Spline *spline, const Octree *tree, const Vec point) {
+    Vec min, max;
+    vec_copy(min, tree->min);
+    vec_copy(max, tree->max);
 
-static float get_closest(const Spline *spline, const QuadTree *tree, const Vec point) {
-    // quadtree for search
-    float min_x = tree->minX;
-    float min_z = tree->minZ;
-    float max_x = tree->maxX;
-    float max_z = tree->maxZ;
-
-    const QuadTreeNode *current = &tree->root;
+    const OctreeNode *current = &tree->root;
     float distance = INFINITY;
     float nearest = 0.0f;
 
+    int numChecked = 0;
+
     for (;;) {
-        float center_x = (min_x + max_x) * 0.5f;
-        float center_z = (min_z + max_z) * 0.5f;
+        Vec center;
+        vec_copy(center, min);
+        vec_add(center, max);
+        vec_scale(center, 0.5f);
 
-        int which_x, which_z;
+        int which[3];
 
-        if (point[0] < center_x) {
-            which_x = 0;
-            max_x = center_x;
-        } else {
-            which_x = 1;
-            min_x = center_x;
+        for (int i = 0; i < 3; i++) {
+            if (point[i] < center[i]) {
+                which[i] = 0;
+                max[i] = center[i];
+            } else {
+                which[i] = 1;
+                min[i] = center[i];
+            }
         }
 
-        if (point[2] < center_z) {
-            which_z = 0;
-            max_z = center_z;
-        } else {
-            which_z = 1;
-            min_z = center_z;
-        }
-
-        const QuadTreeSegment *segment = (which_x == 0) ? current->minXSegments : current->maxXSegments;
-        while (segment != NULL) {
-            get_distance(spline, point, get_segment_id(tree, segment), &distance, &nearest);
-            segment = segment->next;
-        }
-        segment = (which_z == 0) ? current->minZSegments : current->maxZSegments;
-        while (segment != NULL) {
-            get_distance(spline, point, get_segment_id(tree, segment), &distance, &nearest);
-            segment = segment->next;
-        }
-        segment = current->midSegments;
-        while (segment != NULL) {
-            get_distance(spline, point, get_segment_id(tree, segment), &distance, &nearest);
-            segment = segment->next;
+        int segment = current->segments;
+        while (segment >= 0) {
+            if (!(which[0] == 1 && (tree->segmentSides[segment] & 1)) &&
+                !(which[0] == 0 && (tree->segmentSides[segment] & 2)) &&
+                !(which[1] == 1 && (tree->segmentSides[segment] & 4)) &&
+                !(which[1] == 0 && (tree->segmentSides[segment] & 8)) &&
+                !(which[2] == 1 && (tree->segmentSides[segment] & 16)) &&
+                !(which[2] == 0 && (tree->segmentSides[segment] & 32))) {
+                get_distance(spline, point, segment, &distance, &nearest);
+                ++numChecked;
+            }
+            segment = tree->segmentNext[segment];
         }
 
         if (current->children == NULL) {
             break;
         }
-        current = &current->children[which_x | (which_z << 1)];
+        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
     }
 
     return nearest;
 }
 
-bool spline_get_up_height(const Spline *spline, const QuadTree *tree, const Vec pos, Vec up, float *height) {
+bool spline_get_up_height(const Spline *spline, const Octree *tree, const Vec pos, Vec up, float *height) {
     float offset = get_closest(spline, tree, pos);
     Vec point;
     spline_get_baked(spline, offset, point);

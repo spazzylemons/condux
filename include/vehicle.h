@@ -3,6 +3,6 @@
 
 #include "types.h"
 
-void vehicle_update(Vehicle *vehicle, const Spline *spline, const QuadTree *tree, float delta);
+void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree, float delta);
 
 #endif

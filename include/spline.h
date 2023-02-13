@@ -13,6 +13,6 @@ void spline_get_baked(const Spline *spline, float offset, Vec v);
 
 void spline_get_up_right(const Spline *spline, float offset, Vec up, Vec right);
 
-bool spline_get_up_height(const Spline *spline, const QuadTree *tree, const Vec pos, Vec up, float *height);
+bool spline_get_up_height(const Spline *spline, const Octree *tree, const Vec pos, Vec up, float *height);
 
 #endif

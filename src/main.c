@@ -12,9 +12,8 @@
 #include <string.h>
 
 static Spline s;
-static QuadTree tree;
+static Octree tree;
 static bool has_spline = false;
-static bool has_quad_tree = false;
 static const VehicleType test_model = { 15.0f, 7.0f, 1.5f, 12.0f };
 static Vehicle vehicle;
 static Vehicle previous_vehicle;
@@ -45,7 +44,7 @@ void game_init(void) {
         has_spline = spline_load(&s, &asset);
         render_load_spline(&s);
         if (has_spline) {
-            has_quad_tree = quad_tree_init(&tree, &s);
+            octree_init(&tree, &s);
             spline_get_baked(&s, 0.0f, vehicle.position);
             vehicle.position[1] += 1.0f;
             quat_copy(vehicle.rotation, gQuatIdentity);
@@ -80,7 +79,7 @@ static void game_logic(void) {
         pedal = 0.0f;
     }
     steer = controls.steering;
-    if (has_quad_tree) {
+    if (has_spline) {
         memcpy(&previous_vehicle, &vehicle, sizeof(Vehicle));
         vehicle_update(&vehicle, &s, &tree, delta);
     }
