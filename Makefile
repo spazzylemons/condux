@@ -11,6 +11,7 @@ CFILES := \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/render.c \
 	$(SRCDIR)/spline.c \
+	$(SRCDIR)/timing.c \
 	$(SRCDIR)/vehicle.c
 
 CFLAGS := -Wall -Oz -flto -Iinclude -Ibuild

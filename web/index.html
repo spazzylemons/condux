@@ -35,6 +35,10 @@
               ctx.stroke();
             },
 
+            platform_time_msec() {
+              return BigInt(Math.floor(performance.now()));
+            },
+
             platform_width() {
               return canvas.width;
             },
@@ -102,13 +106,10 @@
 
         instance.exports.game_init();
 
-        let lastTimestamp = performance.now();
-        function loopCallback(timestamp) {
+        function loopCallback() {
           ctx.fillStyle = 'black';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          const delta = (timestamp - lastTimestamp) / 1000.0;
-          instance.exports.game_loop(delta);
-          lastTimestamp = timestamp;
+          instance.exports.game_loop();
           requestAnimationFrame(loopCallback);
         }
         requestAnimationFrame(loopCallback);

@@ -17,7 +17,7 @@ static void *backbuffer;
 
 static u16 colors[] ATTRIBUTE_ALIGN(32) = { 65535 };
 
-static u64 last_time;
+static u64 start_time;
 
 void platform_init(int preferred_width, int preferred_height) {
     VIDEO_Init();
@@ -73,7 +73,7 @@ void platform_init(int preferred_width, int preferred_height) {
     guOrtho(proj, 0, screen_mode->efbHeight - 1, 0, screen_mode->fbWidth - 1, 0, 300);
     GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
     // load current time
-    last_time = gettime();
+    start_time = gettime();
 }
 
 void platform_deinit(void) {
@@ -93,12 +93,12 @@ bool platform_should_run(void) {
     return true;
 }
 
-float platform_start_frame(void) {
+uint64_t platform_time_msec(void) {
     u64 new_time = gettime();
-    float result = (float) diff_usec(last_time, new_time) / 1000000.0f;
-    last_time = new_time;
-    return result;
+    return ticks_to_millisecs(diff_ticks(start_time, new_time));
 }
+
+void platform_start_frame(void) {}
 
 void platform_end_frame(void) {
     GX_DrawDone();

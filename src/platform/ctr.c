@@ -5,8 +5,6 @@
 
 static C3D_RenderTarget *target;
 
-static u64 last_time;
-
 #define DEADZONE 0.03f
 
 void platform_init(int preferred_width, int preferred_height) {
@@ -18,7 +16,6 @@ void platform_init(int preferred_width, int preferred_height) {
 
     target = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
     C2D_SceneBegin(target);
-    last_time = osGetTime();
 }
 
 void platform_deinit(void) {
@@ -36,14 +33,14 @@ bool platform_should_run(void) {
     return aptMainLoop();
 }
 
-float platform_start_frame(void) {
+uint64_t platform_time_msec(void) {
+    return osGetTime();
+}
+
+void platform_start_frame(void) {
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
     C2D_TargetClear(target, C2D_Color32f(0.0f, 0.0f, 0.0f, 1.0f));
     C2D_SceneBegin(target);
-    u64 new_time = osGetTime();
-    float result = (new_time - last_time) / 1000.0f;
-    last_time = new_time;
-    return result;
 }
 
 void platform_end_frame(void) {

@@ -8,7 +8,6 @@
 static int screen_width, screen_height;
 static SDL_Window *window;
 static SDL_GLContext gl_context;
-static Uint64 last_time_ms = 0;
 static bool should_run = true;
 
 static uint8_t keyboard_buttons = 0;
@@ -85,15 +84,14 @@ bool platform_should_run(void) {
     return should_run;
 }
 
-float platform_start_frame(void) {
+uint64_t platform_time_msec(void) {
+    return SDL_GetTicks64();
+}
+
+void platform_start_frame(void) {
     glClear(GL_COLOR_BUFFER_BIT);
     // we start drawing GL primitives
     glBegin(GL_LINES);
-    // get frame time
-    Uint64 now = SDL_GetTicks64();
-    float result = (now - last_time_ms) / 1000.0f;
-    last_time_ms = now;
-    return result;
 }
 
 void platform_end_frame(void) {

@@ -55,10 +55,15 @@ void platform_line(float x0, float y0, float x1, float y1);
 bool platform_should_run(void);
 
 /**
- * Begin the current frame. Returns the time in seconds since the last call to
- * platform_start_frame.
+ * Get the time in milliseconds.
  */
-float platform_start_frame(void);
+WEB_IMPORT("platform_time_msec")
+uint64_t platform_time_msec(void);
+
+/**
+ * Begin the current frame.
+ */
+void platform_start_frame(void);
 
 /**
  * Finish drawing the current frame and wait for vblank or similar.
