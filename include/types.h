@@ -102,4 +102,16 @@ typedef struct {
     QuadTreeSegment segmentPool[MAX_BAKED_POINTS];
 } QuadTree;
 
+#define MAX_MESH_VERTICES 32
+#define MAX_MESH_LINES 64
+
+typedef struct {
+    uint8_t numVertices;
+    Vec vertices[MAX_MESH_VERTICES];
+
+    uint8_t numLines;
+    uint8_t line1[MAX_MESH_LINES];
+    uint8_t line2[MAX_MESH_LINES];
+} Mesh;
+
 #endif

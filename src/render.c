@@ -1,3 +1,4 @@
+#include "assets.h"
 #include "linalg.h"
 #include "macros.h"
 #include "platform.h"
@@ -121,4 +122,36 @@ void render_deinit(void) {
     free(spline_points_right);
     spline_points_left = NULL;
     spline_points_right = NULL;
+}
+
+bool mesh_load(Mesh *mesh, Asset *asset) {
+    if (!asset_read_byte(asset, &mesh->numVertices)) return false;
+    if (mesh->numVertices > MAX_MESH_VERTICES) return false;
+
+    for (uint8_t i = 0; i < mesh->numVertices; i++) {
+        if (!asset_read_vec(asset, mesh->vertices[i])) return false;
+    }
+
+    if (!asset_read_byte(asset, &mesh->numLines)) return false;
+    if (mesh->numLines > MAX_MESH_LINES) return false;
+
+    for (uint8_t i = 0; i < mesh->numLines; i++) {
+        if (!asset_read_byte(asset, &mesh->line1[i])) return false;
+        if (mesh->line1[i] >= mesh->numVertices) return false;
+        if (!asset_read_byte(asset, &mesh->line2[i])) return false;
+        if (mesh->line2[i] >= mesh->numVertices) return false;
+    }
+
+    return true;
+}
+
+void mesh_render(const Mesh *mesh, const Vec translation, const Mtx rotation) {
+    for (uint8_t i = 0; i < mesh->numLines; i++) {
+        Vec a, b;
+        mtx_mul_vec(rotation, a, mesh->vertices[mesh->line1[i]]);
+        mtx_mul_vec(rotation, b, mesh->vertices[mesh->line2[i]]);
+        vec_add(a, translation);
+        vec_add(b, translation);
+        render_line(a, b);
+    }
 }

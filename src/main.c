@@ -18,6 +18,8 @@ static bool has_quad_tree = false;
 static const VehicleType test_model = { 15.0f, 7.0f, 1.5f, 12.0f };
 static Vehicle vehicle;
 static Vehicle previous_vehicle;
+static Mesh vehicle_mesh;
+static bool has_mesh = false;
 
 static float steer = 0.0f;
 static float pedal = 0.0f;
@@ -52,6 +54,9 @@ void game_init(void) {
             vehicle.type = &test_model;
             memcpy(&previous_vehicle, &vehicle, sizeof(Vehicle));
         }
+    }
+    if (asset_load(&asset, "mesh_vehicle.bin")) {
+        has_mesh = mesh_load(&vehicle_mesh, &asset);
     }
     timing_init();
 }
@@ -105,21 +110,8 @@ static void game_render(float interpolation) {
     vec_add(camera_pos, up_vehicle);
     set_camera(camera_pos, vehicle_pos, up_vehicle);
     // draw something to show where the vehicle is
-    Vec points[4] = {
-        { 1.0f, 0.0f, 1.0f },
-        { 1.0f, 0.0f, -1.0f },
-        { -1.0f, 0.0f, -1.0f },
-        { -1.0f, 0.0f, 1.0f },
-    };
-    for (int i = 0; i < 4; i++) {
-        Vec p1, p2, q1, q2;
-        vec_copy(p1, points[i]);
-        vec_copy(p2, points[(i + 1) % 4]);
-        mtx_mul_vec(vehicle_rotation, q1, p1);
-        mtx_mul_vec(vehicle_rotation, q2, p2);
-        vec_add(q1, vehicle_pos);
-        vec_add(q2, vehicle_pos);
-        render_line(q1, q2);
+    if (has_mesh) {
+        mesh_render(&vehicle_mesh, vehicle_pos, vehicle_rotation);
     }
     render_spline();
 }

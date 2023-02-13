@@ -42,53 +42,6 @@ class BezierExport(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
         else:
             return {'FINISHED'}
 
-def approximate_best_mesh(remaining):
-    if not len(remaining):
-        return ()
-
-    strips = set()
-    for edge in remaining:
-        p, q = edge
-        strips.add(((edge,), (p, q)))
-        strips.add(((edge,), (q, p)))
-
-    available_edges = set(remaining)
-    replenished = True
-
-    while True:
-        new_strips = set()
-        for used, strip in strips:
-            p = strip[-1]
-            while True:
-                for edge in available_edges:
-                    if edge not in used and p in edge:
-                        q = next(i for i in edge if i != p)
-                        new_strips.add((used + (edge,), strip + (q,)))
-                        break
-                else:
-                    break
-                available_edges.remove(edge)
-        if len(new_strips):
-            strips = new_strips
-            replenished = False
-        elif replenished:
-            break
-        else:
-            available_edges = set(remaining)
-            replenished = True
-
-    result = None
-
-    for used, strip in strips:
-        new_remaining = set(remaining)
-        for edge in used:
-            new_remaining.remove(edge)
-        x = (strip,) + approximate_best_mesh(tuple(new_remaining))
-        if result is None or len(x) < len(result):
-            result = x
-
-    return result
-
 class WireframeExport(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     """Export the selected wireframe mesh."""
     bl_idname = 'condux.wireframe_export'
@@ -104,20 +57,17 @@ class WireframeExport(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
             edges = []
             for edge in mesh.edges:
                 edges.append(tuple(i for i in edge.vertices))
-            strips = approximate_best_mesh(edges)
             # save to file
             with open(self.filepath, 'wb') as file:
                 # write number of points
                 file.write(bytes([len(mesh.vertices)]))
                 for vertex in mesh.vertices:
                     write_co(file, vertex.co)
-                # write number of points
-                file.write(bytes([len(strips)]))
-                for strip in strips:
-                    # write length of strip
-                    file.write(bytes([len(strip)]))
-                    # write strip
-                    file.write(bytes(strip))
+                # write number of edges
+                file.write(bytes([len(edges)]))
+                for edge in edges:
+                    # write endpoints
+                    file.write(bytes(edge))
         except BaseException as e:
             self.report({'ERROR'}, repr(e))
             return {'CANCELLED'}
