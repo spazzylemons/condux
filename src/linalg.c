@@ -77,10 +77,18 @@ float vec_distance_sq(const Vec a, const Vec b) {
     return vec_magnitude_sq(c);
 }
 
+float vec_signed_angle_to(const Vec v, const Vec to, const Vec axis) {
+    Vec cross;
+    vec_cross(cross, v, to);
+    float unsigned_angle = atan2f(sqrtf(vec_magnitude_sq(cross)), vec_dot(v, to));
+    float sign = vec_dot(cross, axis);
+    return (sign > 0.0f) ? -unsigned_angle : unsigned_angle;
+}
+
 const Mtx gMtxIdentity = {
-    1.0f, 0.0f, 0.0f,
-    0.0f, 1.0f, 0.0f,
-    0.0f, 0.0f, 1.0f,
+    { 1.0f, 0.0f, 0.0f },
+    { 0.0f, 1.0f, 0.0f },
+    { 0.0f, 0.0f, 1.0f },
 };
 
 void mtx_copy(Mtx dst, const Mtx src) {

@@ -19,6 +19,7 @@ void vec_cross(Vec dst, const Vec a, const Vec b);
 float vec_dot(const Vec a, const Vec b);
 float vec_magnitude_sq(const Vec v);
 float vec_distance_sq(const Vec a, const Vec b);
+float vec_signed_angle_to(const Vec v, const Vec to, const Vec axis);
 
 extern const Mtx gMtxIdentity;
 

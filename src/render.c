@@ -3,16 +3,15 @@
 #include "render.h"
 
 #include <math.h>
-#include <stdio.h>
 
 #define CUTOFF 0.01f
 
 static Vec camera_pos = { 0.0f, 0.0f, 0.0f };
 
 static Mtx camera_mtx = {
-    1.0f, 0.0f, 0.0f,
-    0.0f, 1.0f, 0.0f,
-    0.0f, 0.0f, 1.0f,
+    { 1.0f, 0.0f, 0.0f },
+    { 0.0f, 1.0f, 0.0f },
+    { 0.0f, 0.0f, 1.0f },
 };
 
 void set_camera(const Vec eye, const Vec at, const Vec up) {

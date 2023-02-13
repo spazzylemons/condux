@@ -31,6 +31,35 @@ typedef struct {
     size_t index;
 } Asset;
 
+typedef struct {
+    /** Controls the maximum speed of the vehicle. */
+    float speed;
+    /** Controls the acceleration rate of the vehicle. */
+    float acceleration;
+    /** Controls the turn strength of the vehicle. */
+    float handling;
+    /** Controls how whichly the vehicle's velocity aligns with its forward vector. */
+    float antiDrift;
+} VehicleType;
+
+typedef struct VehicleController {
+    float (*getSteering) (struct VehicleController *self);
+    float (*getPedal) (struct VehicleController *self);
+} VehicleController;
+
+typedef struct {
+    /** The vehicle's position in global space. */
+    Vec position;
+    /** TODO might want to make this a quaternion */
+    Mtx rotation;
+    /** The vehicle's velocity. */
+    Vec velocity;
+    /** The type of the vehicle. */
+    const VehicleType *type;
+    /** The vehicle controller. */
+    VehicleController *controller;
+} Vehicle;
+
 #define MAX_POINTS 64
 
 typedef struct {

@@ -1,4 +1,5 @@
 #include "assets.h"
+#include "collision.h"
 #include "linalg.h"
 #include "macros.h"
 #include "render.h"
@@ -205,7 +206,6 @@ bool spline_load(Spline *spline, Asset *asset) {
     generate_controls(spline);
     if (!bake_points(spline)) return false;
     temp_generate_render(spline);
-    size_t w = 0;
     return true;
 }
 
@@ -293,6 +293,110 @@ void spline_get_up_right(const Spline *spline, float offset, Vec up, Vec right) 
         mtx_angle_axis(rot, target, tilt);
         mtx_mul_vec(rot, right, temp);
     }
+}
+
+static void get_distance(const Spline *spline, const Vec point, int i, float *distance, float *nearest) {
+    float offset = spline->baked[i].offset;
+    float interval = spline->baked[(i + 1) % spline->numBaked].offset - offset;
+    Vec origin;
+    vec_copy(origin, spline->baked[i].point);
+    Vec direction;
+    vec_copy(direction, spline->baked[(i + 1) % spline->numBaked].point);
+    vec_sub(direction, origin);
+    vec_scale(direction, 1.0f / interval);
+    Vec proj;
+    vec_copy(proj, point);
+    vec_sub(proj, origin);
+    float d = vec_dot(proj, direction);
+    if (d < 0.0f) d = 0.0f;
+    else if (d > interval) d = interval;
+    vec_copy(proj, direction);
+    vec_scale(proj, d);
+    vec_add(proj, origin);
+    float dist = vec_distance_sq(proj, point);
+    if (dist < *distance) {
+        *nearest = offset + d;
+        *distance = dist;
+    }
+}
+
+static int get_segment_id(const QuadTree *tree, const QuadTreeSegment *segment) {
+    return ((uintptr_t) segment - (uintptr_t) tree->segmentPool) / sizeof(QuadTreeSegment);
+}
+
+static float get_closest(const Spline *spline, const QuadTree *tree, const Vec point) {
+    // quadtree for search
+    float min_x = tree->minX;
+    float min_z = tree->minZ;
+    float max_x = tree->maxX;
+    float max_z = tree->maxZ;
+
+    const QuadTreeNode *current = &tree->root;
+    float distance = INFINITY;
+    float nearest = 0.0f;
+
+    for (;;) {
+        float center_x = (min_x + max_x) * 0.5f;
+        float center_z = (min_z + max_z) * 0.5f;
+
+        int which_x, which_z;
+
+        if (point[0] < center_x) {
+            which_x = 0;
+            max_x = center_x;
+        } else {
+            which_x = 1;
+            min_x = center_x;
+        }
+
+        if (point[2] < center_z) {
+            which_z = 0;
+            max_z = center_z;
+        } else {
+            which_z = 1;
+            min_z = center_z;
+        }
+
+        const QuadTreeSegment *segment = (which_x == 0) ? current->minXSegments : current->maxXSegments;
+        while (segment != NULL) {
+            get_distance(spline, point, get_segment_id(tree, segment), &distance, &nearest);
+            segment = segment->next;
+        }
+        segment = (which_z == 0) ? current->minZSegments : current->maxZSegments;
+        while (segment != NULL) {
+            get_distance(spline, point, get_segment_id(tree, segment), &distance, &nearest);
+            segment = segment->next;
+        }
+        segment = current->midSegments;
+        while (segment != NULL) {
+            get_distance(spline, point, get_segment_id(tree, segment), &distance, &nearest);
+            segment = segment->next;
+        }
+
+        if (current->children == NULL) {
+            break;
+        }
+        current = &current->children[which_x | (which_z << 1)];
+    }
+
+    return nearest;
+}
+
+bool spline_get_up_height(const Spline *spline, const QuadTree *tree, const Vec pos, Vec up, float *height) {
+    float offset = get_closest(spline, tree, pos);
+    Vec point;
+    spline_get_baked(spline, offset, point);
+    Vec right;
+    spline_get_up_right(spline, offset, up, right);
+    Vec d;
+    vec_copy(d, pos);
+    vec_sub(d, point);
+    float side_distance = vec_dot(right, d);
+    if (side_distance < -SPLINE_TRACK_RADIUS || side_distance > SPLINE_TRACK_RADIUS) {
+        return false;
+    }
+    *height = vec_dot(up, d);
+    return true;
 }
 
 void spline_test_render(Spline *spline) {

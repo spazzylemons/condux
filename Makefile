@@ -10,9 +10,10 @@ CFILES := \
 	$(SRCDIR)/linalg.c \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/render.c \
-	$(SRCDIR)/spline.c
+	$(SRCDIR)/spline.c \
+	$(SRCDIR)/vehicle.c
 
-CFLAGS := -Oz -flto -Iinclude -Ibuild
+CFLAGS := -Wall -Oz -flto -Iinclude -Ibuild
 
 CC := gcc
 
