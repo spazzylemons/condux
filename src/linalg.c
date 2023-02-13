@@ -1,6 +1,7 @@
 #include "linalg.h"
 
 #include <math.h>
+#include <stdio.h>
 
 const Vec gVecZero = { 0.0f, 0.0f, 0.0f };
 const Vec gVecXAxis = { 1.0f, 0.0f, 0.0f };
@@ -83,6 +84,113 @@ float vec_signed_angle_to(const Vec v, const Vec to, const Vec axis) {
     float unsigned_angle = atan2f(sqrtf(vec_magnitude_sq(cross)), vec_dot(v, to));
     float sign = vec_dot(cross, axis);
     return (sign > 0.0f) ? -unsigned_angle : unsigned_angle;
+}
+
+const Quat gQuatIdentity = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+void quat_copy(Quat dst, const Quat src) {
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    dst[3] = src[3];
+}
+
+void quat_add(Quat dst, const Quat src) {
+    dst[0] += src[0];
+    dst[1] += src[1];
+    dst[2] += src[2];
+    dst[3] += src[3];
+}
+
+void quat_scale(Quat dst, float scale) {
+    dst[0] *= scale;
+    dst[1] *= scale;
+    dst[2] *= scale;
+    dst[3] *= scale;
+}
+
+void quat_mul(Quat dst, const Quat a, const Quat b) {
+    dst[0] = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3];
+    dst[1] = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
+    dst[2] = a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1];
+    dst[3] = a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0];
+}
+
+void quat_angle_axis(Quat q, const Vec axis, float angle) {
+    angle *= 0.5f;
+    q[0] = cosf(angle);
+    float s = sinf(angle);
+    q[1] = axis[0] * s;
+    q[2] = axis[1] * s;
+    q[3] = axis[2] * s;
+}
+
+void quat_to_mtx(Mtx m, const Quat q) {
+    float a, b, c;
+
+    a = q[1] * q[1];
+    b = q[2] * q[2];
+    c = q[3] * q[3];
+    m[0][0] = 1.0f - 2.0f * (b + c);
+    m[1][1] = 1.0f - 2.0f * (a + c);
+    m[2][2] = 1.0f - 2.0f * (a + b);
+
+    a = q[1] * q[2];
+    b = q[3] * q[0];
+    m[0][1] = 2.0f * (a - b);
+    m[1][0] = 2.0f * (a + b);
+
+    a = q[1] * q[3];
+    b = q[2] * q[0];
+    m[0][2] = 2.0f * (a + b);
+    m[2][0] = 2.0f * (a - b);
+
+    a = q[2] * q[3];
+    b = q[1] * q[0];
+    m[1][2] = 2.0f * (a - b);
+    m[2][1] = 2.0f * (a + b);
+}
+
+void quat_slerp(Quat dst, const Quat a, const Quat b, float t) {
+    float cos_half_theta = quat_dot(a, b);
+    // if angle 0, don't interpolate
+    if (fabsf(cos_half_theta) >= 1.0f) {
+        quat_copy(dst, a);
+        return;
+    }
+    float half_theta = acosf(cos_half_theta);
+    float sin_half_theta = sqrtf(1.0f - cos_half_theta * cos_half_theta);
+    // avoid divide by zero, use fallback approach in that case
+    float ra, rb;
+    if (fabsf(sin_half_theta) < 1e-6) {
+        // average the quaternions as fallback
+        ra = 0.5f;
+        rb = 0.5f;
+    } else {
+        ra = sinf((1.0f - t) * half_theta) / sin_half_theta;
+        rb = sinf(t * half_theta) / sin_half_theta;
+    }
+    // scale quaternions and add
+    Quat tmp;
+    quat_copy(tmp, a);
+    quat_scale(tmp, ra);
+    quat_copy(dst, b);
+    quat_scale(dst, rb);
+    quat_add(dst, tmp);
+}
+
+void quat_normalize(Quat q) {
+    float m = quat_magnitude_sq(q);
+    if (m == 0.0f) return;
+    quat_scale(q, 1.0f / sqrtf(m));
+}
+
+float quat_dot(const Quat a, const Quat b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+}
+
+float quat_magnitude_sq(const Quat q) {
+    return q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
 }
 
 const Mtx gMtxIdentity = {

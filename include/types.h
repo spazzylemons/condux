@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 typedef float Vec[3];
+typedef float Quat[4];
 typedef float Mtx[3][3];
 
 typedef struct {
@@ -50,8 +51,8 @@ typedef struct VehicleController {
 typedef struct {
     /** The vehicle's position in global space. */
     Vec position;
-    /** TODO might want to make this a quaternion */
-    Mtx rotation;
+    /** The vehicle's rotation in global space. */
+    Quat rotation;
     /** The vehicle's velocity. */
     Vec velocity;
     /** The type of the vehicle. */

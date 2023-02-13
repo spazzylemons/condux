@@ -10,7 +10,6 @@
 
 #include <math.h>
 #include <string.h>
-#include <stdio.h>
 
 static Spline s;
 static QuadTree tree;
@@ -47,7 +46,7 @@ void game_init(void) {
             has_quad_tree = quad_tree_init(&tree, &s);
             spline_get_baked(&s, 0.0f, vehicle.position);
             vehicle.position[1] += 1.0f;
-            mtx_copy(vehicle.rotation, gMtxIdentity);
+            quat_copy(vehicle.rotation, gQuatIdentity);
             vec_copy(vehicle.velocity, gVecZero);
             vehicle.controller = &player_controller_temp;
             vehicle.type = &test_model;
@@ -83,22 +82,24 @@ static void game_logic(void) {
 }
 
 static void game_render(float interpolation) {
-    // TODO rotation interpolation
     Vec vehicle_pos, tmp_vec;
-    printf("%f\n", interpolation);
-
     vec_copy(tmp_vec, vehicle.position);
     vec_scale(tmp_vec, interpolation);
     vec_copy(vehicle_pos, previous_vehicle.position);
     vec_scale(vehicle_pos, 1.0f - interpolation);
     vec_add(vehicle_pos, tmp_vec);
 
+    Quat vehicle_rot;
+    quat_slerp(vehicle_rot, previous_vehicle.rotation, vehicle.rotation, interpolation);
+
     Vec camera_pos;
     Vec forward_vehicle;
     Vec up_vehicle;
     vec_copy(camera_pos, vehicle_pos);
-    mtx_mul_vec(vehicle.rotation, forward_vehicle, gVecZAxis);
-    mtx_mul_vec(vehicle.rotation, up_vehicle, gVecYAxis);
+    Mtx vehicle_rotation;
+    quat_to_mtx(vehicle_rotation, vehicle_rot);
+    mtx_mul_vec(vehicle_rotation, forward_vehicle, gVecZAxis);
+    mtx_mul_vec(vehicle_rotation, up_vehicle, gVecYAxis);
     vec_scale(forward_vehicle, 5.0f);
     vec_sub(camera_pos, forward_vehicle);
     vec_add(camera_pos, up_vehicle);
@@ -114,8 +115,8 @@ static void game_render(float interpolation) {
         Vec p1, p2, q1, q2;
         vec_copy(p1, points[i]);
         vec_copy(p2, points[(i + 1) % 4]);
-        mtx_mul_vec(vehicle.rotation, q1, p1);
-        mtx_mul_vec(vehicle.rotation, q2, p2);
+        mtx_mul_vec(vehicle_rotation, q1, p1);
+        mtx_mul_vec(vehicle_rotation, q2, p2);
         vec_add(q1, vehicle_pos);
         vec_add(q2, vehicle_pos);
         render_line(q1, q2);

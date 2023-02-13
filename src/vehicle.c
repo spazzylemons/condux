@@ -16,18 +16,22 @@
 static void handle_steering(Vehicle *vehicle, float delta) {
     float steering = vehicle->controller->getSteering(vehicle->controller);
     // local rotate for steering
-    Mtx old_rotation, steering_rotation;
-    mtx_copy(old_rotation, vehicle->rotation);
-    mtx_angle_axis(steering_rotation, gVecYAxis, -steering * vehicle->type->handling * delta);
-    mtx_mul(vehicle->rotation, steering_rotation, old_rotation);
+    Quat steering_rotation, new_rotation;
+    quat_angle_axis(steering_rotation, gVecYAxis, -steering * vehicle->type->handling * delta);
+    quat_mul(new_rotation, steering_rotation, vehicle->rotation);
+    quat_copy(vehicle->rotation, new_rotation);
 }
 
 static void get_up(const Vehicle *vehicle, Vec v) {
-    mtx_mul_vec(vehicle->rotation, v, gVecYAxis);
+    Mtx rot;
+    quat_to_mtx(rot, vehicle->rotation);
+    mtx_mul_vec(rot, v, gVecYAxis);
 }
 
 static void get_forward(const Vehicle *vehicle, Vec v) {
-    mtx_mul_vec(vehicle->rotation, v, gVecZAxis);
+    Mtx rot;
+    quat_to_mtx(rot, vehicle->rotation);
+    mtx_mul_vec(rot, v, gVecZAxis);
 }
 
 static void apply_approach(float delta, float strength, Vec dst, const Vec from, const Vec to) {
@@ -163,10 +167,11 @@ void vehicle_update(Vehicle *vehicle, const Spline *spline, const QuadTree *tree
 	// if it is, we're either perfectly aligned or completely flipped
 	// TODO handle the latter case
     if (vec_magnitude_sq(tmp) != 0.0f) {
-        Mtx old_rotation, rotation_mtx;
-        mtx_copy(old_rotation, vehicle->rotation);
-        mtx_angle_axis(rotation_mtx, tmp, vec_signed_angle_to(up, approach_up, tmp));
-        mtx_mul(vehicle->rotation, old_rotation, rotation_mtx);
+        Quat rotation_quat, new_rotation;
+        quat_angle_axis(rotation_quat, tmp, vec_signed_angle_to(up, approach_up, tmp));
+        quat_mul(new_rotation, vehicle->rotation, rotation_quat);
+        quat_copy(vehicle->rotation, new_rotation);
     }
-    // TODO orthonormalize
+    // normalize rotation
+    quat_normalize(vehicle->rotation);
 }
