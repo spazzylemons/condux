@@ -31,6 +31,7 @@ ifeq ($(PLATFORM), sdl)
 	CFILES += $(SRCDIR)/platform/sdl.c
 	RUN_COMMAND := ./$(TARGET)
 	RUSTLIB := condux-rust/target/debug/libcondux_rust.a
+	CARGONIGHTLY = +nightly
 else ifeq ($(PLATFORM), web)
 	# TODO more portable
 	CC := clang

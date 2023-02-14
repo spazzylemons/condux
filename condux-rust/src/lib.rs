@@ -3,6 +3,7 @@
 
 use core::panic::PanicInfo;
 
+pub mod linalg;
 pub mod render;
 
 extern "C" {

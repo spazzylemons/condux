@@ -82,3 +82,5 @@ int main(void) {
     game_deinit();
 }
 #endif
+
+void rust_eh_personality(void) {}
