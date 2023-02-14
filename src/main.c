@@ -73,6 +73,11 @@ int main(void) {
         platform_start_frame();
         game_loop();
         platform_end_frame();
+        // temporary for allowing exiting the program if the platform has no
+        // exit condition - will want to add exit button in menu
+        if (gControls.buttons & BTN_PAUSE) {
+            break;
+        }
     }
     game_deinit();
 }

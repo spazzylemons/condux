@@ -7,6 +7,7 @@
 #include <wiiuse/wpad.h>
 #include <math.h>
 #include <ogc/lwp_watchdog.h>
+#include <stdlib.h>
 
 u64 gettime(void);
 u32 diff_usec(u64 start, u64 end);
@@ -19,6 +20,20 @@ static void *backbuffer;
 static u16 colors[] ATTRIBUTE_ALIGN(32) = { 65535 };
 
 static u64 start_time;
+
+static bool shouldRun = true;
+static mutex_t shouldRunLock;
+
+static void power_callback(void) {
+    if (LWP_MutexLock(shouldRunLock) == 0) {
+        shouldRun = false;
+        LWP_MutexUnlock(shouldRunLock);
+    }
+}
+
+static void reset_callback(u32 irq, void *ctx) {
+    power_callback();
+}
 
 void platform_init(int preferred_width, int preferred_height) {
     VIDEO_Init();
@@ -73,12 +88,16 @@ void platform_init(int preferred_width, int preferred_height) {
     Mtx44 proj;
     guOrtho(proj, 0, screen_mode->efbHeight - 1, 0, screen_mode->fbWidth - 1, 0, 300);
     GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
+    // setup a callback to allow graceful shutdown
+    if (LWP_MutexInit(&shouldRunLock, false) < 0) abort();
+    SYS_SetResetCallback(reset_callback);
+    SYS_SetPowerCallback(power_callback);
     // load current time
     start_time = gettime();
 }
 
 void platform_deinit(void) {
-    // nothing to close on this platform yet
+    LWP_MutexDestroy(shouldRunLock);
 }
 
 void platform_line(float x0, float y0, float x1, float y1) {
@@ -91,6 +110,11 @@ void platform_line(float x0, float y0, float x1, float y1) {
 }
 
 bool platform_should_run(void) {
+    if (LWP_MutexLock(shouldRunLock) == 0) {
+        bool result = shouldRun;
+        LWP_MutexUnlock(shouldRunLock);
+        return result;
+    }
     return true;
 }
 
