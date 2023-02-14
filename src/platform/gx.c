@@ -6,6 +6,7 @@
 #include <string.h>
 #include <wiiuse/wpad.h>
 #include <math.h>
+#include <ogc/lwp_watchdog.h>
 
 u64 gettime(void);
 u32 diff_usec(u64 start, u64 end);

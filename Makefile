@@ -29,6 +29,7 @@ ERR =
 ifeq ($(PLATFORM), sdl)
 	LDFLAGS += -lSDL2 -lGL
 	CFILES += $(SRCDIR)/platform/sdl.c
+	RUN_COMMAND := ./$(TARGET)
 else ifeq ($(PLATFORM), web)
 	# TODO more portable
 	CC := clang
@@ -42,6 +43,7 @@ else ifeq ($(PLATFORM), web)
 		-Wl,--no-entry
 	BINARY := web/index.wasm
 	TARGET := $(BINARY)
+	RUN_COMMAND := python scripts/run_web.py
 else ifeq ($(PLATFORM), wii)
 	CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 	CFLAGS += \
@@ -56,6 +58,7 @@ else ifeq ($(PLATFORM), wii)
 	BINARY := $(BINARY).elf
 	TARGET := $(TARGET).dol
 	CFILES += $(SRCDIR)/platform/gx.c
+	RUN_COMMAND := dolphin-emu $(TARGET)
 else ifeq ($(PLATFORM), 3ds)
 	CC := $(DEVKITARM)/bin/arm-none-eabi-gcc
 	CFLAGS += \
@@ -72,6 +75,7 @@ else ifeq ($(PLATFORM), 3ds)
 	BINARY := $(BINARY).elf
 	TARGET := $(TARGET).3dsx
 	CFILES += $(SRCDIR)/platform/ctr.c
+	RUN_COMMAND := citra-qt $(TARGET)
 else
 	ERR = $(error unknown platform: $(PLATFORM))
 endif
@@ -81,7 +85,7 @@ DFILES := $(CFILES:$(SRCDIR)/%.c=$(BUILDDIR)/%.d)
 
 $(ERR)
 
-.PHONY: all clean
+.PHONY: all clean run
 
 all: $(TARGET)
 
@@ -111,6 +115,9 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 
 clean:
 	rm -rf $(BUILDDIR) $(TARGET) $(BINARY)
+
+run: $(TARGET)
+	$(RUN_COMMAND)
 
 ifeq (,$(filter clean,$(MAKECMDGOALS)))
 -include $(DFILES)
