@@ -7,6 +7,4 @@
 
 void octree_init(Octree *tree, const Spline *spline);
 
-void octree_free(const Octree *tree);
-
 #endif

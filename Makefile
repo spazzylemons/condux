@@ -7,10 +7,12 @@ SRCDIR := src
 CFILES := \
 	$(SRCDIR)/assets.c \
 	$(SRCDIR)/collision.c \
+	$(SRCDIR)/input.c \
 	$(SRCDIR)/linalg.c \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/render.c \
 	$(SRCDIR)/spline.c \
+	$(SRCDIR)/state.c \
 	$(SRCDIR)/timing.c \
 	$(SRCDIR)/vehicle.c
 

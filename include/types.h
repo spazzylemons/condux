@@ -1,6 +1,8 @@
 #ifndef CONDUX_TYPES_H
 #define CONDUX_TYPES_H
 
+#include "macros.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -33,6 +35,15 @@ typedef struct {
 } Asset;
 
 typedef struct {
+    uint8_t numVertices;
+    Vec vertices[MAX_MESH_VERTICES];
+
+    uint8_t numLines;
+    uint8_t line1[MAX_MESH_LINES];
+    uint8_t line2[MAX_MESH_LINES];
+} Mesh;
+
+typedef struct {
     /** Controls the maximum speed of the vehicle. */
     float speed;
     /** Controls the acceleration rate of the vehicle. */
@@ -41,6 +52,8 @@ typedef struct {
     float handling;
     /** Controls how whichly the vehicle's velocity aligns with its forward vector. */
     float antiDrift;
+    /** The model used to render the vehicle. */
+    Mesh mesh;
 } VehicleType;
 
 typedef struct VehicleController {
@@ -61,9 +74,11 @@ typedef struct {
     VehicleController *controller;
 } Vehicle;
 
-#define MAX_POINTS 64
-#define MAX_BAKE_DEPTH 5
-#define MAX_BAKED_POINTS (MAX_POINTS * (1 << MAX_BAKE_DEPTH))
+typedef struct {
+    uint8_t numVehicles;
+    Vehicle previous[MAX_VEHICLES];
+    Vehicle current[MAX_VEHICLES];
+} VehicleSet;
 
 typedef struct {
     /** The number of control points on the spline. */
@@ -94,17 +109,5 @@ typedef struct {
     int segmentNext[MAX_BAKED_POINTS];
     uint8_t segmentSides[MAX_BAKED_POINTS];
 } Octree;
-
-#define MAX_MESH_VERTICES 32
-#define MAX_MESH_LINES 64
-
-typedef struct {
-    uint8_t numVertices;
-    Vec vertices[MAX_MESH_VERTICES];
-
-    uint8_t numLines;
-    uint8_t line1[MAX_MESH_LINES];
-    uint8_t line2[MAX_MESH_LINES];
-} Mesh;
 
 #endif

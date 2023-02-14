@@ -138,24 +138,36 @@ static void generate_controls(Spline *spline) {
     }
 }
 
-static bool bake_points(Spline *spline) {
+static void bake_points(Spline *spline) {
     // first bake pass to see how many points we need
     find_baked_size(spline);
     // bake points
     bake(spline);
-    return true;
 }
 
 bool spline_load(Spline *spline, Asset *asset) {
+    // static buffers to hold data before building spline
+    // this allows verifying input without modifying the existing spline
+    // so if this function fails, no invaraints are invalidated
+    static uint8_t numPoints;
+    static Vec points[MAX_POINTS];
+    static float tilts[MAX_POINTS];
     // number of points
-    if (!asset_read_byte(asset, &spline->numPoints)) return false;
-    if (spline->numPoints < 3 || spline->numPoints > MAX_POINTS) return false;
+    if (!asset_read_byte(asset, &numPoints)) return false;
+    if (numPoints < 3 || numPoints > MAX_POINTS) return false;
     // read points in
-    for (int i = 0; i < spline->numPoints; i++) {
-        if (!asset_read_vec(asset, spline->points[i].point)) return false;
+    for (int i = 0; i < numPoints; i++) {
+        if (!asset_read_vec(asset, points[i])) return false;
         uint8_t tilt_int;
         if (!asset_read_byte(asset, &tilt_int)) return false;
-        spline->points[i].tilt = (tilt_int / 256.0f) * (2.0f * PI);
+        tilts[i] = (tilt_int / 256.0f) * (2.0f * PI);
+    }
+    // TODO handle div by zero tests
+    // otherwise data looks good
+    spline->numPoints = numPoints;
+    for (uint8_t i = 0; i < numPoints; i++) {
+        vec_copy(spline->points[i].point, points[i]);
+        spline->points[i].tilt = tilts[i];
     }
     // fix tilts
     spline->totalTilt = spline->points[0].tilt;
@@ -171,7 +183,7 @@ bool spline_load(Spline *spline, Asset *asset) {
         }
     }
     generate_controls(spline);
-    if (!bake_points(spline)) return false;
+    bake_points(spline);
     return true;
 }
 

@@ -3,6 +3,9 @@
 
 #include "types.h"
 
+extern VehicleController gPlayerController;
+extern VehicleController gEmptyController;
+
 void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree, float delta);
 
 #endif
