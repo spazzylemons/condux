@@ -51,7 +51,7 @@ static void handle_steering(Vehicle *vehicle, float delta) {
     quat_copy(vehicle->rotation, new_rotation);
 }
 
-static void get_up(const Vehicle *vehicle, Vec v) {
+void vehicle_up_vector(const Vehicle *vehicle, Vec v) {
     Mtx rot;
     quat_to_mtx(rot, vehicle->rotation);
     mtx_mul_vec(rot, v, gVecYAxis);
@@ -160,7 +160,7 @@ void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree, 
     handle_steering(vehicle, delta);
     // apply gravity
     Vec up;
-    get_up(vehicle, up);
+    vehicle_up_vector(vehicle, up);
     apply_gravity(vehicle, delta, up);
     // get amount of gravity being experienced
     Vec gravity;

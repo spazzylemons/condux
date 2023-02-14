@@ -97,17 +97,23 @@ typedef struct {
 
 typedef struct OctreeNode {
     int segments;
+    int vehicles;
     struct OctreeNode *children;
 } OctreeNode;
+
+#define OCTREE_POOL_SIZE (8 + 64 + 512)
 
 typedef struct {
     Vec min, max;
 
     OctreeNode root;
-    OctreeNode childPool[8 + 64 + 512];
+    OctreeNode childPool[OCTREE_POOL_SIZE];
 
     int segmentNext[MAX_BAKED_POINTS];
     uint8_t segmentSides[MAX_BAKED_POINTS];
+
+    int vehicleNext[MAX_VEHICLES];
+    uint8_t vehicleSides[MAX_VEHICLES];
 } Octree;
 
 #endif

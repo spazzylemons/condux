@@ -23,4 +23,6 @@
 
 #define COLLISION_DEPTH 0.25f
 
+#define VEHICLE_RADIUS 0.3f
+
 #endif

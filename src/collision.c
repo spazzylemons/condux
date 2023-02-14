@@ -80,7 +80,7 @@ static void add_node(Octree *tree, const Vec segment_min, const Vec segment_max,
         vec_add(center, max);
         vec_scale(center, 0.5f);
 
-        for (int i = 0; i < 3; i++) {
+        for (uint8_t i = 0; i < 3; i++) {
             if (segment_min[i] < center[i] && segment_max[i] < center[i]) {
                 which[i] = 0;
                 max[i] = center[i];
@@ -99,7 +99,8 @@ static void add_node(Octree *tree, const Vec segment_min, const Vec segment_max,
         current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
     }
     // add to list
-    for (int i = 0; i < 3; i++) {
+    tree->segmentSides[segment] = 0;
+    for (uint8_t i = 0; i < 3; i++) {
         if (which[i] == 0) {
             tree->segmentSides[segment] |= (1 << (2 * i));
         } else if (which[i] == 1) {
@@ -131,4 +132,114 @@ void octree_init(Octree *tree, const Spline *spline) {
         get_bounds(spline, i, min, max);
         add_node(tree, min, max, i);
     }
+}
+
+void octree_reset_vehicles(Octree *tree) {
+    tree->root.vehicles = -1;
+    for (size_t i = 0; i < OCTREE_POOL_SIZE; i++) {
+        tree->childPool[i].vehicles = -1;
+    }
+}
+
+void octree_add_vehicle(Octree *tree, const Vec pos, int index) {
+    Vec vehicle_min, vehicle_max;
+    vehicle_min[0] = pos[0] - (2.0f * VEHICLE_RADIUS);
+    vehicle_min[1] = pos[1] - (2.0f * VEHICLE_RADIUS);
+    vehicle_min[2] = pos[2] - (2.0f * VEHICLE_RADIUS);
+    vehicle_max[0] = pos[0] + (2.0f * VEHICLE_RADIUS);
+    vehicle_max[1] = pos[1] + (2.0f * VEHICLE_RADIUS);
+    vehicle_max[2] = pos[2] + (2.0f * VEHICLE_RADIUS);
+
+    Vec min, max;
+    vec_copy(min, tree->min);
+    vec_copy(max, tree->max);
+
+    OctreeNode *current = &tree->root;
+    int which[3];
+    for (;;) {
+        Vec center;
+        vec_copy(center, min);
+        vec_add(center, max);
+        vec_scale(center, 0.5f);
+
+        for (uint8_t i = 0; i < 3; i++) {
+            if (vehicle_min[i] < center[i] && vehicle_max[i] < center[i]) {
+                which[i] = 0;
+                max[i] = center[i];
+            } else if (vehicle_min[i] > center[i] && vehicle_max[i] > center[i]) {
+                which[i] = 1;
+                min[i] = center[i];
+            } else {
+                which[i] = -1;
+            }
+        }
+
+        if (which[0] < 0 || which[1] < 0 || which[2] < 0 || current->children == NULL) {
+            break;
+        }
+
+        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
+    }
+    // add to list
+    tree->vehicleSides[index] = 0;
+    for (uint8_t i = 0; i < 3; i++) {
+        if (which[i] == 0) {
+            tree->vehicleSides[index] |= (1 << (2 * i));
+        } else if (which[i] == 1) {
+            tree->vehicleSides[index] |= (1 << ((2 * i) + 1));
+        }
+    }
+    tree->vehicleNext[index] = current->vehicles;
+    current->vehicles = index;
+}
+
+void octree_find_which(const Vec point, Vec min, Vec max, int *which) {
+    Vec center;
+    vec_copy(center, min);
+    vec_add(center, max);
+    vec_scale(center, 0.5f);
+
+    for (uint8_t i = 0; i < 3; i++) {
+        if (point[i] < center[i]) {
+            which[i] = 0;
+            max[i] = center[i];
+        } else {
+            which[i] = 1;
+            min[i] = center[i];
+        }
+    }
+}
+
+uint8_t octree_find_collisions(Octree *tree, const Vec point, uint8_t *out) {
+    Vec min, max;
+    vec_copy(min, tree->min);
+    vec_copy(max, tree->max);
+
+    uint8_t result = 0;
+
+    const OctreeNode *current = &tree->root;
+    for (;;) {
+        int which[3];
+        octree_find_which(point, min, max, which);
+
+        int index = current->vehicles;
+        while (index >= 0) {
+            if (!(which[0] == 1 && (tree->vehicleSides[index] & 1)) &&
+                !(which[0] == 0 && (tree->vehicleSides[index] & 2)) &&
+                !(which[1] == 1 && (tree->vehicleSides[index] & 4)) &&
+                !(which[1] == 0 && (tree->vehicleSides[index] & 8)) &&
+                !(which[2] == 1 && (tree->vehicleSides[index] & 16)) &&
+                !(which[2] == 0 && (tree->vehicleSides[index] & 32))) {
+                out[result++] = index;
+            }
+            index = tree->vehicleNext[index];
+        }
+
+        if (current->children == NULL) {
+            break;
+        }
+        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
+    }
+
+    return result;
 }
