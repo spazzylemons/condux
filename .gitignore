@@ -9,3 +9,6 @@ condux.elf
 condux.dol
 condux.3dsx
 web/index.wasm
+
+condux-rust/target/
+condux-rust/Cargo.lock

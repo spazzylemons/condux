@@ -30,6 +30,7 @@ ifeq ($(PLATFORM), sdl)
 	LDFLAGS += -lSDL2 -lGL
 	CFILES += $(SRCDIR)/platform/sdl.c
 	RUN_COMMAND := ./$(TARGET)
+	RUSTLIB := condux-rust/target/debug/libcondux_rust.a
 else ifeq ($(PLATFORM), web)
 	# TODO more portable
 	CC := clang
@@ -44,6 +45,8 @@ else ifeq ($(PLATFORM), web)
 	BINARY := web/index.wasm
 	TARGET := $(BINARY)
 	RUN_COMMAND := python scripts/run_web.py
+	CARGOFLAGS += --target=wasm32-wasi
+	RUSTLIB := condux-rust/target/wasm32-wasi/debug/libcondux_rust.a
 else ifeq ($(PLATFORM), wii)
 	CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 	CFLAGS += \
@@ -52,6 +55,7 @@ else ifeq ($(PLATFORM), wii)
 		-mcpu=750 \
 		-meabi \
 		-mhard-float \
+		-Wl,--allow-multiple-definition \
 		-I$(DEVKITPRO)/libogc/include \
 		-L$(DEVKITPRO)/libogc/lib/wii
 	LDFLAGS += -lwiiuse -lbte -logc -lm
@@ -59,6 +63,9 @@ else ifeq ($(PLATFORM), wii)
 	TARGET := $(TARGET).dol
 	CFILES += $(SRCDIR)/platform/gx.c
 	RUN_COMMAND := dolphin-emu $(TARGET)
+	CARGOFLAGS += -Zbuild-std=core --target=powerpc-unknown-eabi.json
+	CARGONIGHTLY := +nightly
+	RUSTLIB := condux-rust/target/powerpc-unknown-eabi/debug/libcondux_rust.a
 else ifeq ($(PLATFORM), 3ds)
 	CC := $(DEVKITARM)/bin/arm-none-eabi-gcc
 	CFLAGS += \
@@ -69,6 +76,7 @@ else ifeq ($(PLATFORM), 3ds)
 		-mfloat-abi=hard \
 		-mtp=soft \
 		-D__3DS__ \
+		-Wl,--allow-multiple-definition \
 		-I$(DEVKITPRO)/libctru/include \
 		-L$(DEVKITPRO)/libctru/lib
 	LDFLAGS += -specs=3dsx.specs -lcitro2d -lcitro3d -lctru -lm
@@ -76,6 +84,9 @@ else ifeq ($(PLATFORM), 3ds)
 	TARGET := $(TARGET).3dsx
 	CFILES += $(SRCDIR)/platform/ctr.c
 	RUN_COMMAND := citra-qt $(TARGET)
+	CARGOFLAGS += -Zbuild-std=core --target=arm-none-eabi.json
+	CARGONIGHTLY := +nightly
+	RUSTLIB := condux-rust/target/arm-none-eabi/debug/libcondux_rust.a
 else
 	ERR = $(error unknown platform: $(PLATFORM))
 endif
@@ -102,8 +113,8 @@ $(BUILDDIR)/bundle.h: $(wildcard assets/*)
 	mkdir -p $(dir $@)
 	python scripts/asset_bundler.py
 
-$(BINARY): $(OFILES)
-	$(CC) $(CFLAGS) -o $@ $(OFILES) $(LDFLAGS)
+$(BINARY): $(OFILES) $(RUSTLIB)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(BUILDDIR)/%.d: $(SRCDIR)/%.c
 	mkdir -p $(dir $@)
@@ -113,8 +124,12 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(RUSTLIB): $(wildcard condux-rust/src/*)
+	cd condux-rust && cargo $(CARGONIGHTLY) build $(CARGOFLAGS)
+
 clean:
 	rm -rf $(BUILDDIR) $(TARGET) $(BINARY)
+	cd condux-rust && cargo clean
 
 run: $(TARGET)
 	$(RUN_COMMAND)

@@ -1,0 +1,34 @@
+{
+    "arch": "arm",
+    "cpu": "mpcore",
+    "data-layout": "e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64",
+    "dynamic-linking": false,
+    "env": "newlib",
+    "exe-suffix": ".elf",
+    "executables": true,
+    "has-rpath": true,
+    "llvm-target": "arm-none-eabihf",
+    "linker": "arm-none-eabi-gcc",
+    "linker-flavor": "gcc",
+    "linker-is-gnu": true,
+    "os": "horizon",
+    "pre-link-args": {
+        "gcc": [
+            "-mword-relocations",
+            "-march=armv6k",
+            "-mtune=mpcore",
+            "-mfloat-abi=hard",
+            "-mtp=soft"
+        ]
+    },
+    "panic-strategy": "abort",
+    "relocation-model": "static",
+    "target-endian": "little",
+    "target-family": "unix",
+    "target-mcount": "_mcount",
+    "target-c-int-width": "32",
+    "target-pointer-width": "32",
+    "vendor": "nintendo",
+    "features": "+vfp2"
+}
+

@@ -10,9 +10,9 @@
 
 #define CUTOFF 0.01f
 
-static Vec camera_pos = { 0.0f, 0.0f, 0.0f };
+Vec camera_pos = { 0.0f, 0.0f, 0.0f };
 
-static Mtx camera_mtx = {
+Mtx camera_mtx = {
     { 1.0f, 0.0f, 0.0f },
     { 0.0f, 1.0f, 0.0f },
     { 0.0f, 0.0f, 1.0f },
@@ -21,15 +21,6 @@ static Mtx camera_mtx = {
 static Vec *spline_points_left = NULL;
 static Vec *spline_points_right = NULL;
 static size_t num_spline_points = 0;
-
-void set_camera(const Vec eye, const Vec at, const Vec up) {
-    Vec delta;
-    vec_copy(delta, eye);
-    vec_sub(delta, at);
-    mtx_look_at(camera_mtx, delta, up);
-    mtx_transpose(camera_mtx);
-    vec_copy(camera_pos, eye);
-}
 
 void render_line(const Vec a, const Vec b) {
     // perform camera transform
