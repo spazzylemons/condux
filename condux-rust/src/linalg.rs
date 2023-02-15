@@ -9,10 +9,10 @@ pub struct Vector {
 }
 
 impl Vector {
-    const ZERO: Self = Self::new(0.0, 0.0, 0.0);
-    const X_AXIS: Self = Self::new(1.0, 0.0, 0.0);
-    const Y_AXIS: Self = Self::new(0.0, 1.0, 0.0);
-    const Z_AXIS: Self = Self::new(0.0, 0.0, 1.0);
+    pub const ZERO: Self = Self::new(0.0, 0.0, 0.0);
+    pub const X_AXIS: Self = Self::new(1.0, 0.0, 0.0);
+    pub const Y_AXIS: Self = Self::new(0.0, 1.0, 0.0);
+    pub const Z_AXIS: Self = Self::new(0.0, 0.0, 1.0);
 
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
@@ -63,6 +63,16 @@ impl Vector {
         } else {
             unsigned
         }
+    }
+}
+
+impl From<[f32; 3]> for Vector {
+    fn from(value: [f32; 3]) -> Self {
+        Self::new(
+            value[0],
+            value[1],
+            value[2],
+        )
     }
 }
 
@@ -209,7 +219,7 @@ pub struct Quat {
 }
 
 impl Quat {
-    const IDENT: Self = Self::new(1.0, 0.0, 0.0, 0.0);
+    pub const IDENT: Self = Self::new(1.0, 0.0, 0.0, 0.0);
 
     pub const fn new(w: f32, x: f32, y: f32, z: f32) -> Self {
         Self { w, x, y, z }
@@ -400,6 +410,7 @@ extern "C" fn quat_magnitude_sq(a: *const f32) -> f32 {
     Quat::from(a).magnitude_sq()
 }
 
+#[derive(Clone, Copy)]
 pub struct Mtx {
     m00: f32,
     m01: f32,
@@ -413,7 +424,7 @@ pub struct Mtx {
 }
 
 impl Mtx {
-    pub const IDENTITY: Self = Self::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+    pub const IDENT: Self = Self::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
 
     pub const fn new(m00: f32, m01: f32, m02: f32, m10: f32, m11: f32, m12: f32, m20: f32, m21: f32, m22: f32,) -> Self {
         Self { m00, m01, m02, m10, m11, m12, m20, m21, m22 }

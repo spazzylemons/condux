@@ -64,7 +64,7 @@ else ifeq ($(PLATFORM), wii)
 	TARGET := $(TARGET).dol
 	CFILES += $(SRCDIR)/platform/gx.c
 	RUN_COMMAND := dolphin-emu $(TARGET)
-	CARGOFLAGS += -Zbuild-std=core --target=powerpc-unknown-eabi.json
+	CARGOFLAGS += -Zbuild-std=core,alloc --target=powerpc-unknown-eabi.json
 	CARGONIGHTLY := +nightly
 	RUSTLIB := condux-rust/target/powerpc-unknown-eabi/debug/libcondux_rust.a
 else ifeq ($(PLATFORM), 3ds)
@@ -85,7 +85,7 @@ else ifeq ($(PLATFORM), 3ds)
 	TARGET := $(TARGET).3dsx
 	CFILES += $(SRCDIR)/platform/ctr.c
 	RUN_COMMAND := citra-qt $(TARGET)
-	CARGOFLAGS += -Zbuild-std=core --target=arm-none-eabi.json
+	CARGOFLAGS += -Zbuild-std=core,alloc --target=arm-none-eabi.json
 	CARGONIGHTLY := +nightly
 	RUSTLIB := condux-rust/target/arm-none-eabi/debug/libcondux_rust.a
 else

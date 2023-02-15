@@ -3,7 +3,9 @@
 
 use core::panic::PanicInfo;
 
+pub mod assets;
 pub mod linalg;
+pub mod platform;
 pub mod render;
 
 extern "C" {
