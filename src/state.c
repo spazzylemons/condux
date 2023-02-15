@@ -7,6 +7,11 @@
 
 #include <math.h>
 
+#define CAMERA_FOLLOW_DISTANCE 2.5f
+#define CAMERA_APPROACH_SPEED 2.0f
+#define CAMERA_UP_DISTANCE 0.325f
+#define STEERING_FACTOR 0.25f
+
 Spline gSpline;
 static Octree octree;
 
@@ -14,6 +19,14 @@ static uint8_t numVehicles;
 static Vehicle vehicles[MAX_VEHICLES];
 static Vec prevPos[MAX_VEHICLES];
 static Quat prevRot[MAX_VEHICLES];
+static float prevSteering[MAX_VEHICLES];
+
+static Vec cameraPos, prevCameraPos;
+static Vec cameraTarget, prevCameraTarget;
+static Vec cameraUp, prevCameraUp;
+
+// (0, sin(PI / -8), cos(PI / -8))
+static const Vec targetAngle = { 0.0f, -0.3826834323650898f, 0.9238795325112867f };
 
 bool game_state_init(Asset *spline_asset) {
     if (!spline_load(&gSpline, spline_asset)) {
@@ -44,15 +57,57 @@ bool game_state_spawn(const Vec pos, const VehicleType *type, VehicleController 
 }
 
 static void adjust_normal(Vec v, const Vec up, const Vec normal) {
-    Vec tmp;
     vec_copy(v, normal);
-    vec_copy(tmp, up);
-    vec_scale(tmp, vec_dot(normal, up));
-    vec_sub(v, tmp);
+    vec_scaled_add(v, up, -vec_dot(normal, up));
     vec_normalize(v);
 }
 
-void game_state_update(float delta) {
+static void camera_target_pos(Vec dst, const Vehicle *vehicle) {
+    Vec offset;
+    Mtx offsetMtx;
+    vec_copy(dst, vehicle->position);
+    quat_to_mtx(offsetMtx, vehicle->rotation);
+    mtx_mul_vec(offsetMtx, offset, targetAngle);
+    vec_scaled_add(dst, offset, -CAMERA_FOLLOW_DISTANCE);
+}
+
+static void camera_look_at_target(const Vehicle *vehicle) {
+    vec_copy(cameraTarget, vehicle->position);
+    vehicle_up_vector(vehicle, cameraUp);
+    vec_scaled_add(cameraTarget, cameraUp, CAMERA_UP_DISTANCE);
+}
+
+static void update_camera_pos(const Vehicle *vehicle) {
+    vec_copy(prevCameraPos, cameraPos);
+    vec_copy(prevCameraTarget, cameraTarget);
+    vec_copy(prevCameraUp, cameraUp);
+
+    // set ourselves to the proper distance
+    Vec tmp, translationGlobal, delta, up, target;
+    vec_scaled_copy(tmp, gVecZAxis, sqrtf(vec_distance_sq(vehicle->position, cameraPos)) - CAMERA_FOLLOW_DISTANCE);
+    Mtx cameraMtx;
+    vec_copy(delta, cameraPos);
+    vec_sub(delta, vehicle->position);
+    vehicle_up_vector(vehicle, up);
+    mtx_look_at(cameraMtx, delta, up);
+    mtx_mul_vec(cameraMtx, translationGlobal, tmp);
+    vec_add(cameraPos, translationGlobal);
+    // approach target location
+    camera_target_pos(target, vehicle);
+    vec_approach(tmp, CAMERA_APPROACH_SPEED, cameraPos, target);
+    vec_copy(cameraPos, tmp);
+    camera_look_at_target(vehicle);
+}
+
+void game_state_teleport_camera(uint8_t cameraFocus) {
+    if (cameraFocus < numVehicles) {
+        const Vehicle *vehicle = &vehicles[cameraFocus];
+        camera_target_pos(cameraPos, vehicle);
+        camera_look_at_target(vehicle);
+    }
+}
+
+void game_state_update(uint8_t cameraFocus) {
     static Vec totalTranslations[MAX_VEHICLES];
     static Vec originalVelocity[MAX_VEHICLES];
     static uint8_t momentumNeighbors[MAX_VEHICLES][MAX_VEHICLES];
@@ -64,7 +119,8 @@ void game_state_update(float delta) {
     for (uint8_t i = 0; i < numVehicles; i++) {
         vec_copy(prevPos[i], vehicles[i].position);
         quat_copy(prevRot[i], vehicles[i].rotation);
-        vehicle_update(&vehicles[i], &gSpline, &octree, delta);
+        prevSteering[i] = vehicles[i].steering;
+        vehicle_update(&vehicles[i], &gSpline, &octree);
 
         vec_copy(totalTranslations[i], gVecZero);
         vec_copy(originalVelocity[i], vehicles[i].velocity);
@@ -112,38 +168,40 @@ void game_state_update(float delta) {
             vec_add(vehicles[neighbor].velocity, originalVelocity[i]);
         }
     }
+    // now, run camera logic
+    if (cameraFocus < numVehicles) {
+        const Vehicle *vehicle = &vehicles[cameraFocus];
+        update_camera_pos(vehicle);
+    }
 }
 
 static void interpolate_vehicle(uint8_t i, float interpolation, Vec pos, Mtx rot) {
-    Vec tmp;
-    vec_copy(tmp, vehicles[i].position);
-    vec_scale(tmp, interpolation);
-    vec_copy(pos, prevPos[i]);
-    vec_scale(pos, 1.0f - interpolation);
-    vec_add(pos, tmp);
+    vec_scaled_copy(pos, vehicles[i].position, interpolation);
+    vec_scaled_add(pos, prevPos[i], 1.0f - interpolation);
+
+    Quat prevVehicleRot, curVehicleRot, prevRoll, curRoll, prevQuat, curQuat;
+    quat_copy(prevVehicleRot, prevRot[i]);
+    quat_copy(curVehicleRot, vehicles[i].rotation);
+    quat_angle_axis(prevRoll, gVecZAxis, prevSteering[i] * STEERING_FACTOR);
+    quat_angle_axis(curRoll, gVecZAxis, vehicles[i].steering * STEERING_FACTOR);
+    quat_mul(prevQuat, prevRoll, prevVehicleRot);
+    quat_mul(curQuat, curRoll, curVehicleRot);
 
     Quat rot_quat;
-    quat_slerp(rot_quat, prevRot[i], vehicles[i].rotation, interpolation);
+    quat_slerp(rot_quat, prevQuat, curQuat, interpolation);
     quat_to_mtx(rot, rot_quat);
 }
 
-void game_state_render(uint8_t cameraFocus, float interpolation) {
-    if (cameraFocus < numVehicles) {
-        Vec pos;
-        Mtx rot;
-        interpolate_vehicle(cameraFocus, interpolation, pos, rot);
+void game_state_render(float interpolation) {
+    Vec interpCameraPos, interpCameraTarget, interpCameraUp;
+    vec_scaled_copy(interpCameraPos, cameraPos, interpolation);
+    vec_scaled_add(interpCameraPos, prevCameraPos, 1.0f - interpolation);
+    vec_scaled_copy(interpCameraTarget, cameraTarget, interpolation);
+    vec_scaled_add(interpCameraTarget, prevCameraTarget, 1.0f - interpolation);
+    vec_scaled_copy(interpCameraUp, cameraUp, interpolation);
+    vec_scaled_add(interpCameraUp, prevCameraUp, 1.0f - interpolation);
 
-        Vec cam, forward, up;
-
-        mtx_mul_vec(rot, forward, gVecZAxis);
-        mtx_mul_vec(rot, up, gVecYAxis);
-
-        vec_scale(forward, 3.0f);
-        vec_copy(cam, pos);
-        vec_sub(cam, forward);
-        vec_add(cam, up);
-        set_camera(cam, pos, up);
-    }
+    set_camera(interpCameraPos, interpCameraTarget, interpCameraUp);
 
     for (uint8_t i = 0; i < numVehicles; i++) {
         Vec pos;

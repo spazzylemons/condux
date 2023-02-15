@@ -68,6 +68,8 @@ typedef struct {
     Quat rotation;
     /** The vehicle's velocity. */
     Vec velocity;
+    /** The vehicle's steering, used in rendering. */
+    float steering;
     /** The type of the vehicle. */
     const VehicleType *type;
     /** The vehicle controller. */

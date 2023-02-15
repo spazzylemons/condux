@@ -51,6 +51,18 @@ void vec_scale(Vec v, float scale) {
     v[2] *= scale;
 }
 
+void vec_scaled_copy(Vec dst, const Vec src, float scale) {
+    dst[0] = src[0] * scale;
+    dst[1] = src[1] * scale;
+    dst[2] = src[2] * scale;
+}
+
+void vec_scaled_add(Vec dst, const Vec src, float scale) {
+    dst[0] += src[0] * scale;
+    dst[1] += src[1] * scale;
+    dst[2] += src[2] * scale;
+}
+
 void vec_normalize(Vec v) {
     float m = vec_magnitude_sq(v);
     if (m == 0.0f) return;
@@ -61,6 +73,11 @@ void vec_cross(Vec dst, const Vec a, const Vec b) {
     dst[0] = a[1] * b[2] - b[1] * a[2];
     dst[1] = a[2] * b[0] - b[2] * a[0];
     dst[2] = a[0] * b[1] - b[0] * a[1];
+}
+
+void vec_approach(Vec dst, float strength, const Vec from, const Vec to) {
+    vec_scaled_copy(dst, to, strength * TICK_DELTA);
+    vec_scaled_add(dst, from, 1.0f / (1.0f + (strength * TICK_DELTA)));
 }
 
 float vec_dot(const Vec a, const Vec b) {

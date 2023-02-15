@@ -3,6 +3,8 @@
 
 #define TICKS_PER_SECOND 60
 
+#define TICK_DELTA (1.0f / TICKS_PER_SECOND)
+
 #define MAX_MESH_VERTICES 32
 
 #define MAX_MESH_LINES 64

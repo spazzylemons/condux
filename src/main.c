@@ -35,6 +35,7 @@ void game_init(void) {
     game_state_spawn(spawn, &test_model, &gEmptyController);
     spline_get_baked(&gSpline, 15.0f, spawn);
     game_state_spawn(spawn, &test_model, &gEmptyController);
+    game_state_teleport_camera(0);
     timing_init();
 }
 
@@ -46,13 +47,12 @@ void game_deinit(void) {
 #endif
 
 static void game_logic(void) {
-    float delta = 1.0f / TICKS_PER_SECOND;
     input_poll();
-    game_state_update(delta);
+    game_state_update(0);
 }
 
 static void game_render(float interpolation) {
-    game_state_render(0, interpolation);
+    game_state_render(interpolation);
     render_spline();
 }
 

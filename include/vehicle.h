@@ -6,7 +6,7 @@
 extern VehicleController gPlayerController;
 extern VehicleController gEmptyController;
 
-void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree, float delta);
+void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree);
 
 void vehicle_up_vector(const Vehicle *vehicle, Vec v);
 

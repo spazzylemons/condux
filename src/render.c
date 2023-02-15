@@ -55,12 +55,9 @@ void render_line(const Vec a, const Vec b) {
     if (a[2] < CUTOFF && b[2] > CUTOFF) {
         // if line crosses, we need to cut the line
         float n = (b[2] - CUTOFF) / (b[2] - a[2]);
-        Vec d;
         vec_copy(t, a);
-        vec_copy(d, b);
         vec_scale(t, n);
-        vec_scale(d, 1.0f - n);
-        vec_add(t, d);
+        vec_scaled_add(t, b, 1.0f - n);
         a = t;
     }
     // adjust for screen res
