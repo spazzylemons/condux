@@ -16,10 +16,23 @@
 
 static VehicleType test_model = { 15.0f, 7.0f, 1.5f, 12.0f };
 
+#ifdef CONDUX_WEB
+void __wasm_call_ctors(void);
+
+void __wasm_call_dtors(void) {
+    // we never all destructors, so tell this to LLVM
+}
+#endif
+
 WEB_EXPORT("game_init")
 void game_init(void) {
+#ifdef CONDUX_WEB
+    // prevents linker magic that we don't want
+    __wasm_call_ctors();
+#endif
     platform_init(640, 480);
     input_init();
+    render_init();
     Asset asset;
     if (!asset_load(&asset, "mesh_vehicle.bin")) abort();
     if (!mesh_load(&test_model.mesh, &asset)) abort();
@@ -52,8 +65,7 @@ static void game_logic(void) {
 }
 
 static void game_render(float interpolation) {
-    game_state_render(interpolation);
-    render_spline();
+    game_state_render(0, interpolation);
 }
 
 WEB_EXPORT("game_loop")

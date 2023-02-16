@@ -44,6 +44,12 @@ typedef struct {
 } Mesh;
 
 typedef struct {
+    uint8_t ranges;
+    uint8_t points[MAX_GLYPH_ARRAY];
+    uint8_t lines[MAX_GLYPH_ARRAY];
+} Glyph;
+
+typedef struct {
     /** Controls the maximum speed of the vehicle. */
     float speed;
     /** Controls the acceleration rate of the vehicle. */

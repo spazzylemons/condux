@@ -39,7 +39,7 @@ else ifeq ($(PLATFORM), web)
 		-DCONDUX_WEB=1 \
 		-DNDEBUG
 	LDFLAGS += \
-		-nostartfiles \
+		-mexec-model=reactor \
 		-Wl,--no-entry
 	BINARY := web/index.wasm
 	TARGET := $(BINARY)
@@ -98,7 +98,7 @@ all: $(TARGET)
 $(BUILDDIR)/assets.o: $(BUILDDIR)/bundle.h
 $(BUILDDIR)/assets.d: $(BUILDDIR)/bundle.h
 
-$(BUILDDIR)/bundle.h: $(wildcard assets/*)
+$(BUILDDIR)/bundle.h: $(shell find assets)
 	mkdir -p $(dir $@)
 	python scripts/asset_bundler.py
 

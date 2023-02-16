@@ -192,7 +192,7 @@ static void interpolate_vehicle(uint8_t i, float interpolation, Vec pos, Mtx rot
     quat_to_mtx(rot, rot_quat);
 }
 
-void game_state_render(float interpolation) {
+void game_state_render(uint8_t uiFocus, float interpolation) {
     Vec interpCameraPos, interpCameraTarget, interpCameraUp;
     vec_scaled_copy(interpCameraPos, cameraPos, interpolation);
     vec_scaled_add(interpCameraPos, prevCameraPos, 1.0f - interpolation);
@@ -208,5 +208,18 @@ void game_state_render(float interpolation) {
         Mtx rot;
         interpolate_vehicle(i, interpolation, pos, rot);
         mesh_render(&vehicles[i].type->mesh, pos, rot);
+    }
+
+    render_spline();
+
+    if (uiFocus < numVehicles) {
+        const Vehicle *vehicle = &vehicles[uiFocus];
+        Vec v, forward;
+        vehicle_velocity_without_gravity(vehicle, v);
+        vehicle_forward_vector(vehicle, forward);
+        float speed = sqrtf(vec_magnitude_sq(v));
+        // if moving opposite where we're facing, flip reported speed
+        if (vec_dot(v, forward) < 0.0f) speed *= -1.0f;
+        render_text(6.0f, 18.0f, 2.0f, "SPEED %.2f", speed);
     }
 }

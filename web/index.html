@@ -94,6 +94,23 @@
               steeringPtr[0] = steering;
             },
           },
+
+          wasi_snapshot_preview1: {
+            fd_close(fd) {
+              // stub, return ENOSYS
+              return 52;
+            },
+
+            fd_seek(fd, offset, whence, ret) {
+              // stub, return ENOSYS
+              return 52;
+            },
+
+            fd_write(fd, iovs, iovsLen, ret) {
+              // stub, return ENOSYS
+              return 52;
+            },
+          },
         });
 
         window.addEventListener('keydown', event => {

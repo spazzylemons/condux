@@ -69,9 +69,10 @@ void platform_deinit(void) {
 static void point(float x, float y) {
     // convert to [-1, 1]
     x /= screen_width / 2.0f;
-    x -= 1.0f;
+    x += (1.0f - screen_width) / screen_width;
     y /= screen_height / 2.0f;
-    y = 1.0f - y; // flip y axis
+    y += (1.0f - screen_height) / screen_height;
+    y = -y; // flip y axis
     glVertex2f(x, y);
 }
 

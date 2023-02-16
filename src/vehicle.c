@@ -62,6 +62,24 @@ void vehicle_up_vector(const Vehicle *vehicle, Vec v) {
     mtx_mul_vec(rot, v, gVecYAxis);
 }
 
+void vehicle_forward_vector(const Vehicle *vehicle, Vec v) {
+    Mtx rot;
+    quat_to_mtx(rot, vehicle->rotation);
+    mtx_mul_vec(rot, v, gVecZAxis);
+}
+
+void vehicle_velocity_without_gravity(const Vehicle *vehicle, Vec v) {
+    // get up vector
+    Vec up;
+    vehicle_up_vector(vehicle, up);
+    // get amount of gravity being experienced
+    Vec gravity;
+    vec_scaled_copy(gravity, up, vec_dot(vehicle->velocity, up));
+    // remove gravity
+    vec_copy(v, vehicle->velocity);
+    vec_sub(v, gravity);
+}
+
 static void get_forward(const Vehicle *vehicle, Vec v) {
     Mtx rot;
     quat_to_mtx(rot, vehicle->rotation);
@@ -147,8 +165,7 @@ void vehicle_update(Vehicle *vehicle, const Spline *spline, const Octree *tree) 
     apply_gravity(vehicle, up);
     // get amount of gravity being experienced
     Vec gravity;
-    vec_copy(gravity, up);
-    vec_scale(gravity, vec_dot(vehicle->velocity, up));
+    vec_scaled_copy(gravity, up, vec_dot(vehicle->velocity, up));
     // remove gravity for acceleration calculation
     Vec without_gravity;
     vec_copy(without_gravity, vehicle->velocity);

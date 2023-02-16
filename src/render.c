@@ -6,6 +6,7 @@
 #include "spline.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define CUTOFF 0.01f
@@ -29,6 +30,27 @@ void set_camera(const Vec eye, const Vec at, const Vec up) {
     mtx_look_at(camera_mtx, delta, up);
     mtx_transpose(camera_mtx);
     vec_copy(camera_pos, eye);
+}
+
+// ascii-only for now
+static Glyph glyphs[95];
+
+void render_init(void) {
+    // load the font
+    Asset asset;
+    if (!asset_load(&asset, "font.bin")) {
+        // set glyphs to empty for fallback
+        for (uint8_t i = 0; i < 95; i++) {
+            glyphs[i].ranges = 0;
+        }
+    } else {
+        // load glyphs
+        for (uint8_t i = 0; i < 95; i++) {
+            if (!glyph_load(&glyphs[i], &asset)) {
+                glyphs[i].ranges = 0;
+            }
+        }
+    }
 }
 
 void render_line(const Vec a, const Vec b) {
@@ -151,4 +173,59 @@ void mesh_render(const Mesh *mesh, const Vec translation, const Mtx rotation) {
         vec_add(b, translation);
         render_line(a, b);
     }
+}
+
+bool glyph_load(Glyph *glyph, Asset *asset) {
+    if (!asset_read_byte(asset, &glyph->ranges)) return false;
+    uint8_t numPoints = glyph->ranges & 15;
+    uint8_t numLines = glyph->ranges >> 4;
+
+    for (uint8_t i = 0; i < numPoints; i++) {
+        if (!asset_read_byte(asset, &glyph->points[i])) return false;
+    }
+
+    for (uint8_t i = 0; i < numLines; i++) {
+        if (!asset_read_byte(asset, &glyph->lines[i])) return false;
+        uint8_t p = glyph->lines[i] & 15;
+        uint8_t q = glyph->lines[i] >> 4;
+        if (p >= numPoints || q >= numPoints) return false;
+    }
+
+    return true;
+}
+
+void glyph_render(const Glyph *glyph, float x, float y, float scale) {
+    uint8_t numLines = glyph->ranges >> 4;
+    for (uint8_t i = 0; i < numLines; i++) {
+        uint8_t p1 = glyph->points[glyph->lines[i] & 15];
+        uint8_t p2 = glyph->points[glyph->lines[i] >> 4];
+        float x0 = ((p1 & 15) * scale) + x;
+        float y0 = y - ((p1 >> 4) * scale);
+        float x1 = ((p2 & 15) * scale) + x;
+        float y1 = y - ((p2 >> 4) * scale);
+        platform_line(x0, y0, x1, y1);
+    }
+}
+
+void render_text_va(float x, float y, float scale, const char *fmt, va_list arg) {
+    static char buf[512];
+    vsnprintf(buf, sizeof(buf), fmt, arg);
+    buf[511] = '\0';
+
+    char *str = buf;
+    while (*str) {
+        uint8_t c = *str++ - 32;
+        if (c < 95) {
+            const Glyph *glyph = &glyphs[c];
+            glyph_render(glyph, x, y, scale);
+        }
+        x += GLYPH_SPACING * scale;
+    }
+}
+
+void render_text(float x, float y, float scale, const char *fmt, ...) {
+    va_list arg;
+    va_start(arg, fmt);
+    render_text_va(x, y, scale, fmt, arg);
+    va_end(arg);
 }

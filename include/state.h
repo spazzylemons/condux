@@ -15,6 +15,6 @@ void game_state_teleport_camera(uint8_t cameraFocus);
 
 void game_state_update(uint8_t cameraFocus);
 
-void game_state_render(float interpolation);
+void game_state_render(uint8_t uiFocus, float interpolation);
 
 #endif
