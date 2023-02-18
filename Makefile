@@ -1,6 +1,8 @@
 TARGET := condux
 BINARY := $(TARGET)
 
+LIBRARY := libcondux.a
+
 BUILDDIR := build
 SRCDIR := src
 
@@ -16,9 +18,10 @@ CFILES := \
 	$(SRCDIR)/timing.c \
 	$(SRCDIR)/vehicle.c
 
-CFLAGS := -Wall -Oz -flto -Iinclude -Ibuild
+CFLAGS := -Wall -Oz -Iinclude -Ibuild
 
 CC := gcc
+AR := ar
 
 LDFLAGS := -lm
 
@@ -30,37 +33,10 @@ ifeq ($(PLATFORM), sdl)
 	LDFLAGS += -lSDL2 -lGL
 	CFILES += $(SRCDIR)/platform/sdl.c
 	RUN_COMMAND := ./$(TARGET)
-else ifeq ($(PLATFORM), web)
-	# TODO more portable
-	CC := clang
-	CFLAGS += \
-		--target=wasm32-unknown-wasi \
-		--sysroot=/usr/share/wasi-sysroot \
-		-DCONDUX_WEB=1 \
-		-DNDEBUG
-	LDFLAGS += \
-		-mexec-model=reactor \
-		-Wl,--no-entry
-	BINARY := web/index.wasm
-	TARGET := $(BINARY)
-	RUN_COMMAND := python scripts/run_web.py
-else ifeq ($(PLATFORM), wii)
-	CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
-	CFLAGS += \
-		-DGEKKO \
-		-mrvl \
-		-mcpu=750 \
-		-meabi \
-		-mhard-float \
-		-I$(DEVKITPRO)/libogc/include \
-		-L$(DEVKITPRO)/libogc/lib/wii
-	LDFLAGS += -lwiiuse -lbte -logc -lm
-	BINARY := $(BINARY).elf
-	TARGET := $(TARGET).dol
-	CFILES += $(SRCDIR)/platform/gx.c
-	RUN_COMMAND := dolphin-emu $(TARGET)
+	BUILD_COMMAND := rust/build-sdl.sh
 else ifeq ($(PLATFORM), 3ds)
 	CC := $(DEVKITARM)/bin/arm-none-eabi-gcc
+	AR := $(DEVKITARM)/bin/arm-none-eabi-ar
 	CFLAGS += \
 		-mword-relocations \
 		-ffunction-sections \
@@ -72,10 +48,11 @@ else ifeq ($(PLATFORM), 3ds)
 		-I$(DEVKITPRO)/libctru/include \
 		-L$(DEVKITPRO)/libctru/lib
 	LDFLAGS += -specs=3dsx.specs -lcitro2d -lcitro3d -lctru -lm
-	BINARY := $(BINARY).elf
-	TARGET := $(TARGET).3dsx
+	BINARY := $(BINARY).3dsx
+	TARGET := $(BINARY)
 	CFILES += $(SRCDIR)/platform/ctr.c
 	RUN_COMMAND := citra-qt $(TARGET)
+	BUILD_COMMAND := rust/build-3ds.sh
 else
 	ERR = $(error unknown platform: $(PLATFORM))
 endif
@@ -89,11 +66,11 @@ $(ERR)
 
 all: $(TARGET)
 
-%.3dsx: %.elf
-	3dsxtool $< $@
-
 %.dol: %.elf
 	elf2dol $< $@
+
+$(TARGET): $(LIBRARY) $(wildcard rust/src/*.rs)
+	$(BUILD_COMMAND) $(TARGET)
 
 $(BUILDDIR)/assets.o: $(BUILDDIR)/bundle.h
 $(BUILDDIR)/assets.d: $(BUILDDIR)/bundle.h
@@ -102,8 +79,8 @@ $(BUILDDIR)/bundle.h: $(shell find assets)
 	mkdir -p $(dir $@)
 	python scripts/asset_bundler.py
 
-$(BINARY): $(OFILES)
-	$(CC) $(CFLAGS) -o $@ $(OFILES) $(LDFLAGS)
+$(LIBRARY): $(OFILES)
+	$(AR) -rcs $@ $(OFILES)
 
 $(BUILDDIR)/%.d: $(SRCDIR)/%.c
 	mkdir -p $(dir $@)
@@ -114,7 +91,8 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -rf $(BUILDDIR) $(TARGET) $(BINARY)
+	rm -rf $(BUILDDIR) $(TARGET) $(BINARY) $(LIBRARY)
+	cd rust && cargo clean
 
 run: $(TARGET)
 	$(RUN_COMMAND)

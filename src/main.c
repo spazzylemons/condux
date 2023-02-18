@@ -18,10 +18,6 @@ static VehicleType test_model = { 15.0f, 7.0f, 1.5f, 12.0f };
 
 #ifdef CONDUX_WEB
 void __wasm_call_ctors(void);
-
-void __wasm_call_dtors(void) {
-    // we never all destructors, so tell this to LLVM
-}
 #endif
 
 WEB_EXPORT("game_init")
@@ -77,20 +73,3 @@ void game_loop(void) {
     }
     game_render(interpolation);
 }
-
-#ifndef CONDUX_WEB
-int main(void) {
-    game_init();
-    while (platform_should_run()) {
-        platform_start_frame();
-        game_loop();
-        platform_end_frame();
-        // temporary for allowing exiting the program if the platform has no
-        // exit condition - will want to add exit button in menu
-        if (gControls.buttons & BTN_PAUSE) {
-            break;
-        }
-    }
-    game_deinit();
-}
-#endif

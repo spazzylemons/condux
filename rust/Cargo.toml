@@ -1,0 +1,10 @@
+[package]
+name = "condux"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+bindgen = "0.64.0"
+
+[target.armv6k-nintendo-3ds.dependencies]
+ctru-rs = { git = "https://github.com/rust3ds/ctru-rs.git" }
