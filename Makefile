@@ -15,7 +15,6 @@ CFILES := \
 	$(SRCDIR)/render.c \
 	$(SRCDIR)/spline.c \
 	$(SRCDIR)/state.c \
-	$(SRCDIR)/timing.c \
 	$(SRCDIR)/vehicle.c
 
 CFLAGS := -Wall -Oz -Iinclude -Ibuild
@@ -92,7 +91,7 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 
 clean:
 	rm -rf $(BUILDDIR) $(TARGET) $(BINARY) $(LIBRARY)
-	cd rust && cargo clean
+	# cd rust && cargo clean
 
 run: $(TARGET)
 	$(RUN_COMMAND)

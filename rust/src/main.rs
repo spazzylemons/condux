@@ -1,4 +1,5 @@
 pub mod bindings;
+pub mod timing;
 
 #[cfg(target_os = "horizon")]
 use ctru::prelude::*;
