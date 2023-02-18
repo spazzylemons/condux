@@ -13,6 +13,7 @@ typedef float Mtx[3][3];
 typedef struct {
     Vec point;
     Vec control;
+    float controlMid;
     float tilt;
     float tiltOffset;
 } SplinePoint;

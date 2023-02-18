@@ -12,74 +12,38 @@
 #define FORWARD_VEC_SIZE 0.125f
 
 static void bezier(const Spline *spline, uint8_t index, float offset, Vec v) {
-    float fac_a = (1.0f - offset) * (1.0f - offset);
-    float fac_b = 2.0f * (1.0f - offset) * offset;
-    float fac_c = offset * offset;
-    uint8_t other_index = (index + 2) % spline->numPoints;
-    Vec temp;
-    vec_copy(v, spline->points[index].point);
-    vec_scale(v, fac_a);
-    vec_copy(temp, spline->points[index].control);
-    vec_scale(temp, fac_b);
-    vec_add(v, temp);
-    vec_copy(temp, spline->points[other_index].point);
-    vec_scale(temp, fac_c);
-    vec_add(v, temp);
+    uint8_t otherIndex = (index + 2) % spline->numPoints;
+    vec_scaled_copy(v, spline->points[index].point, (1.0f - offset) * (1.0f - offset));
+    vec_scaled_add(v, spline->points[index].control, 2.0f * (1.0f - offset) * offset);
+    vec_scaled_add(v, spline->points[otherIndex].point, offset * offset);
 }
 
 static void interpolate(const Spline *spline, float offset, Vec v) {
-    offset = fmodf(offset, spline->numPoints);
-    int index = offset;
+    uint8_t index = offset;
     offset -= index;
+    index %= spline->numPoints;
+    uint8_t prevIndex = (index + spline->numPoints - 1) % spline->numPoints;
+    float prevMid = spline->points[prevIndex].controlMid;
+    float nextMid = spline->points[index].controlMid;
     Vec temp;
-    bezier(spline, (index + spline->numPoints - 1) % spline->numPoints, offset * 0.5f + 0.5f, v);
-    bezier(spline, index, offset * 0.5f, temp);
+    bezier(spline, prevIndex, offset * (1.0f - prevMid) + prevMid, v);
+    bezier(spline, index, offset * nextMid, temp);
     vec_scale(v, 1.0f - offset);
-    vec_scale(temp, offset);
-    vec_add(v, temp);
+    vec_scaled_add(v, temp, offset);
 }
 
-static void find_baked_recursive(Spline *spline, int index, float begin, float end, int depth) {
-    if (depth >= MAX_BAKE_DEPTH) return;
-
-    Vec v1, v2;
-    interpolate(spline, index + begin, v1);
-    interpolate(spline, index + end, v2);
-
-    float segment_length_squared = vec_distance_sq(v1, v2);
-    if (segment_length_squared > BAKE_LENGTH_SQ) {
-        float mid = (begin + end) * 0.5f;
-        ++spline->numBaked;
-        // recurse on either end of midpoint
-        find_baked_recursive(spline, index, begin, mid, depth + 1);
-        find_baked_recursive(spline, index, mid, end, depth + 1);
-    }
-}
-
-static void find_baked_size(Spline *spline) {
-    // start at zero
-    spline->numBaked = 0;
-    // for each point, recursively find points to bake
-    for (int i = 0; i < spline->numPoints; i++) {
-        // bake at control point
-        ++spline->numBaked;
-        // bake in between
-        find_baked_recursive(spline, i, 0.0f, 1.0f, 0);
-    }
-}
-
-static void add_baked(Spline *spline, float position, size_t *w) {
-    SplineBaked *baked = &spline->baked[*w];
+static void add_baked(Spline *spline, float position) {
+    SplineBaked *baked = &spline->baked[spline->numBaked];
     baked->position = position;
     interpolate(spline, position, baked->point);
-    if (*w) {
-        spline->length += sqrtf(vec_distance_sq(baked->point, spline->baked[*w - 1].point));
+    if (spline->numBaked != 0) {
+        spline->length += sqrtf(vec_distance_sq(baked->point, spline->baked[spline->numBaked - 1].point));
     }
     baked->offset = spline->length;
-    ++*w;
+    ++spline->numBaked;
 }
 
-static void bake_recursive(Spline *spline, int index, float begin, float end, int depth, size_t *w) {
+static void bake_recursive(Spline *spline, int index, float begin, float end, int depth) {
     if (depth >= MAX_BAKE_DEPTH) return;
 
     Vec v1, v2;
@@ -90,25 +54,25 @@ static void bake_recursive(Spline *spline, int index, float begin, float end, in
     if (segment_length_squared > BAKE_LENGTH_SQ) {
         float mid = (begin + end) * 0.5f;
         // recurse on either end of midpoint - in-order to avoid sorting
-        bake_recursive(spline, index, begin, mid, depth + 1, w);
-        add_baked(spline, index + mid, w);
-        bake_recursive(spline, index, mid, end, depth + 1, w);
+        bake_recursive(spline, index, begin, mid, depth + 1);
+        add_baked(spline, index + mid);
+        bake_recursive(spline, index, mid, end, depth + 1);
     }
 }
 
 static void bake(Spline *spline) {
-    // index to write to
-    size_t w = 0;
     // set starting size of spline to zero
     spline->length = 0.0f;
+    // index to write baked points to
+    spline->numBaked = 0;
     // for each point, recursively find points to bake
-    for (int i = 0; i < spline->numPoints; i++) {
+    for (uint8_t i = 0; i < spline->numPoints; i++) {
         // bake at control point
-        add_baked(spline, i, &w);
+        add_baked(spline, i);
         // add length to tilt offsets
         spline->points[i].tiltOffset = spline->length;
         // bake in between
-        bake_recursive(spline, i, 0.0f, 1.0f, 0, &w);
+        bake_recursive(spline, i, 0.0f, 1.0f, 0);
     }
     // finish off length measurement
     spline->length += sqrtf(vec_distance_sq(spline->baked[0].point, spline->baked[spline->numBaked - 1].point));
@@ -116,33 +80,21 @@ static void bake(Spline *spline) {
 
 static void generate_controls(Spline *spline) {
     // generate bezier control points
-    for (int a = 0; a < spline->numPoints; a++) {
-        int b = (a + 1) % spline->numPoints;
-        int c = (a + 2) % spline->numPoints;
+    for (uint8_t a = 0; a < spline->numPoints; a++) {
+        uint8_t b = (a + 1) % spline->numPoints;
+        uint8_t c = (a + 2) % spline->numPoints;
         float da = sqrtf(vec_distance_sq(spline->points[a].point, spline->points[b].point));
         float db = sqrtf(vec_distance_sq(spline->points[b].point, spline->points[c].point));
         // TODO handle potential divs by zero in this area
         float mid = da / (da + db);
         float fac_a = (mid - 1.0f) / (2.0f * mid);
-        float fac_b = (1.0f) / (2.0f * mid * (1.0f - mid));
+        float fac_b = 1.0f / (2.0f * mid * (1.0f - mid));
         float fac_c = mid / (2.0f * (mid - 1.0f));
-        Vec temp;
-        vec_copy(spline->points[a].control, spline->points[a].point);
-        vec_scale(spline->points[a].control, fac_a);
-        vec_copy(temp, spline->points[b].point);
-        vec_scale(temp, fac_b);
-        vec_add(spline->points[a].control, temp);
-        vec_copy(temp, spline->points[c].point);
-        vec_scale(temp, fac_c);
-        vec_add(spline->points[a].control, temp);
+        vec_scaled_copy(spline->points[a].control, spline->points[a].point, fac_a);
+        vec_scaled_add(spline->points[a].control, spline->points[b].point, fac_b);
+        vec_scaled_add(spline->points[a].control, spline->points[c].point, fac_c);
+        spline->points[a].controlMid = mid;
     }
-}
-
-static void bake_points(Spline *spline) {
-    // first bake pass to see how many points we need
-    find_baked_size(spline);
-    // bake points
-    bake(spline);
 }
 
 bool spline_load(Spline *spline, Asset *asset) {
@@ -183,14 +135,14 @@ bool spline_load(Spline *spline, Asset *asset) {
         }
     }
     generate_controls(spline);
-    bake_points(spline);
+    bake(spline);
     return true;
 }
 
 static float convert_baked_offset(const Spline *spline, float baked_offset) {
     // binary search
     size_t start = 0;
-    size_t end = spline->numBaked - 1;
+    size_t end = spline->numBaked;
     size_t current = (start + end) / 2;
     while (start < current) {
         if (baked_offset <= spline->baked[current].offset) {
@@ -201,10 +153,17 @@ static float convert_baked_offset(const Spline *spline, float baked_offset) {
         current = (start + end) / 2;
     }
     // interpolate
-    float offset_begin = spline->baked[current].offset;
-    float offset_end = spline->baked[current + 1].offset;
-    float interp = (baked_offset - offset_begin) / (offset_end - offset_begin);
-    return (1.0f - interp) * spline->baked[current].position + interp * spline->baked[current + 1].position;
+    float offsetBegin = spline->baked[current].offset;
+    float offsetEnd = spline->baked[(current + 1) % spline->numBaked].offset;
+    float positionBegin = spline->baked[current].position;
+    float positionEnd = spline->baked[(current + 1) % spline->numBaked].position;
+    if (current == spline->numBaked - 1) {
+        offsetEnd += spline->length;
+        positionEnd += spline->numPoints;
+    }
+    float interp = (baked_offset - offsetBegin) / (offsetEnd - offsetBegin);
+    float result = (1.0f - interp) * positionBegin + interp * positionEnd;
+    return result;
 }
 
 void spline_get_baked(const Spline *spline, float offset, Vec v) {
@@ -239,8 +198,8 @@ float spline_get_tilt(const Spline *spline, float offset) {
     float pre_baked = fmodf(offset, spline->length);
     offset = convert_baked_offset(spline, offset);
     int index = offset;
-    float a = lagrange(spline, index + spline->numPoints - 1, pre_baked + spline->length);
-    float b = lagrange(spline, index + spline->numPoints, pre_baked + spline->length);
+    float a = lagrange(spline, index - 1, pre_baked);
+    float b = lagrange(spline, index, pre_baked);
     offset -= index;
     return a * (1.0f - offset) + b * offset;
 }
