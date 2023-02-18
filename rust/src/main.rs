@@ -1,4 +1,5 @@
 pub mod bindings;
+pub mod input;
 pub mod timing;
 
 #[cfg(target_os = "horizon")]
