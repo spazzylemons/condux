@@ -2,6 +2,7 @@ pub mod bindings;
 pub mod linalg;
 pub mod input;
 pub mod timing;
+pub mod vehicle;
 
 #[cfg(target_os = "horizon")]
 use ctru::prelude::*;

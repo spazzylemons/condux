@@ -52,7 +52,12 @@ pub struct Vector {
 }
 
 impl Vector {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+    pub const ZERO: Vector = Self::new(0.0, 0.0, 0.0);
+    pub const X_AXIS: Vector = Self::new(1.0, 0.0, 0.0);
+    pub const Y_AXIS: Vector = Self::new(0.0, 1.0, 0.0);
+    pub const Z_AXIS: Vector = Self::new(0.0, 0.0, 1.0);
+
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 
@@ -88,6 +93,18 @@ impl Vector {
 impl Length for Vector {
     fn dot(&self, other: &Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
+    }
+}
+
+impl From<[f32; 3]> for Vector {
+    fn from(value: [f32; 3]) -> Self {
+        Self::new(value[0], value[1], value[2])
+    }
+}
+
+impl From<Vector> for [f32; 3] {
+    fn from(value: Vector) -> Self {
+        [value.x, value.y, value.z]
     }
 }
 
@@ -224,6 +241,18 @@ impl Neg for Quat {
         self.y = -self.y;
         self.z = -self.z;
         self
+    }
+}
+
+impl From<[f32; 4]> for Quat {
+    fn from(value: [f32; 4]) -> Self {
+        Self::new(value[0], value[1], value[2], value[3])
+    }
+}
+
+impl From<Quat> for [f32; 4] {
+    fn from(value: Quat) -> Self {
+        [value.w, value.x, value.y, value.z]
     }
 }
 
