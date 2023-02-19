@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use crate::{bindings, linalg::{Quat, Mtx, Vector, Length}};
 
 const GRAVITY_APPROACH_SPEED: f32 = 5.0;
@@ -6,16 +8,16 @@ const FRICTION_COEFFICIENT: f32 = 0.1;
 const GRAVITY_FALLOFF_POINT: f32 = 2.0;
 const STEERING_APPROACH_SPEED: f32 = 6.0;
 
-pub struct Vehicle {
+pub struct Vehicle<'a> {
     pub position: Vector,
     pub rotation: Quat,
     pub velocity: Vector,
     pub steering: f32,
-    pub ty: &'static bindings::VehicleType,
-    pub controller: &'static mut bindings::VehicleController,
+    pub ty: &'a bindings::VehicleType,
+    pub controller: &'a dyn VehicleController,
 }
 
-impl Vehicle {
+impl<'a> Vehicle<'a> {
     pub fn up_vector(&self) -> Vector {
         Mtx::from(self.rotation) * Vector::Y_AXIS
     }
@@ -35,7 +37,7 @@ impl Vehicle {
     }
 
     fn handle_steering(&mut self) {
-        let steering = unsafe { (&*self.controller).getSteering.unwrap()(self.controller) };
+        let steering = self.controller.steering();
         // local rotate for steering
         let steering_rotation = Quat::axis_angle(&Vector::Y_AXIS, -steering * self.ty.handling * (bindings::TICK_DELTA as f32));
         self.rotation = steering_rotation * self.rotation;
@@ -45,7 +47,7 @@ impl Vehicle {
     }
 
     fn apply_acceleration_no_speed_cap(&mut self, without: &mut Vector, forward: Vector) {
-        let pedal = unsafe { (&*self.controller).getPedal.unwrap()(self.controller) };
+        let pedal = self.controller.pedal();
         *without += forward * (pedal * self.ty.acceleration * (bindings::TICK_DELTA as f32));
     }
 
@@ -136,5 +138,43 @@ impl Vehicle {
         self.update_collision(spline, tree);
         // normalize rotation
         self.rotation = self.rotation.normalized();
+    }
+}
+
+pub trait VehicleController {
+    fn pedal(&self) -> f32;
+    fn steering(&self) -> f32;
+}
+
+pub struct PlayerController<'a> {
+    pub controls: &'a Mutex<bindings::Controls>,
+}
+
+impl<'a> VehicleController for PlayerController<'a> {
+    fn pedal(&self) -> f32 {
+        let controls = self.controls.lock().unwrap();
+        if (controls.buttons & bindings::BTN_BACK as u8) != 0 {
+            -1.0
+        } else if (controls.buttons & bindings::BTN_OK as u8) != 0 {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
+    fn steering(&self) -> f32 {
+        self.controls.lock().unwrap().steering
+    }
+}
+
+pub struct EmptyController;
+
+impl VehicleController for EmptyController {
+    fn pedal(&self) -> f32 {
+        0.0
+    }
+
+    fn steering(&self) -> f32 {
+        0.0
     }
 }

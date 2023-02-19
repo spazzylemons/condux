@@ -1,4 +1,4 @@
-use std::{sync::Mutex, mem::zeroed, ffi::CString, fmt::Write};
+use std::{mem::zeroed, ffi::CString, fmt::Write};
 
 use crate::{linalg::{Vector, Mtx}, bindings};
 
@@ -55,6 +55,15 @@ pub struct Renderer {
 const CUTOFF: f32 = 0.01;
 
 impl Renderer {
+    pub fn new() -> Self {
+        Self {
+            camera_pos: Vector::ZERO,
+            camera_mtx: Mtx::IDENT,
+            spline_points: vec![],
+            glyphs: vec![],
+        }
+    }
+
     pub fn set_camera(&mut self, eye: Vector, at: Vector, up: Vector) {
         self.camera_mtx = Mtx::looking_at(eye - at, up).transposed();
         self.camera_pos = eye;
@@ -170,13 +179,6 @@ macro_rules! render_write {
     };
 }
 
-pub static RENDERER: Mutex<Renderer> = Mutex::new(Renderer {
-    camera_pos: Vector::ZERO,
-    camera_mtx: Mtx::IDENT,
-    spline_points: vec![],
-    glyphs: vec![],
-});
-
 impl bindings::Mesh {
     pub fn load(asset: &mut bindings::Asset) -> Option<bindings::Mesh> {
         let mut mesh = unsafe { zeroed::<bindings::Mesh>() };
@@ -208,52 +210,13 @@ impl bindings::Mesh {
         Some(mesh)
     }
 
-    pub fn render(&self, translation: Vector, rotation: Mtx) {
+    pub fn render(&self, renderer: &Renderer, translation: Vector, rotation: Mtx) {
         for i in 0..self.numLines as usize {
             let a = Vector::from(self.vertices[self.line1[i] as usize]);
             let a = a * rotation + translation;
             let b = Vector::from(self.vertices[self.line2[i] as usize]);
             let b = b * rotation + translation;
-            RENDERER.lock().unwrap().line(a, b);
+            renderer.line(a, b);
         }
     }
-}
-
-#[no_mangle]
-pub extern "C" fn render_init() {
-    RENDERER.lock().unwrap().load_glyphs();
-}
-
-#[no_mangle]
-pub extern "C" fn render_line(a: *const f32, b: *const f32) {
-    RENDERER.lock().unwrap().line(Vector::from(a), Vector::from(b));
-}
-
-#[no_mangle]
-pub extern "C" fn render_load_spline(spline: *const bindings::Spline) {
-    RENDERER.lock().unwrap().load_spline(unsafe { &*spline });
-}
-
-#[no_mangle]
-pub extern "C" fn render_spline() {
-    RENDERER.lock().unwrap().render_spline();
-}
-
-#[no_mangle]
-pub extern "C" fn mesh_load(mesh: *mut bindings::Mesh, asset: *mut bindings::Asset) -> bool {
-    match bindings::Mesh::load(unsafe { &mut *asset }) {
-        Some(v) => {
-            unsafe {
-                *mesh = v;
-            }
-            true
-        },
-
-        None => false
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn mesh_render(mesh: *const bindings::Mesh, translation: *const f32, rotation: *const [f32; 3]) {
-    unsafe { &*mesh }.render(Vector::from(translation), Mtx::from(rotation));
 }

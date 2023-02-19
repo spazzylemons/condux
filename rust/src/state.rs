@@ -1,20 +1,20 @@
-use std::{fmt::Write, sync::Mutex, mem::zeroed};
+use std::fmt::Write;
 
-use crate::{bindings, linalg::{Vector, Quat, Mtx, Length}, vehicle::Vehicle, render::RENDERER};
+use crate::{bindings, linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, VehicleController}, render::Renderer};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
 const CAMERA_UP_DISTANCE: f32 = 0.325;
 const STEERING_FACTOR: f32 = 0.25;
 
-struct VehicleState {
-    vehicle: Vehicle,
+struct VehicleState<'a> {
+    vehicle: Vehicle<'a>,
     prev_pos: Vector,
     prev_rot: Quat,
     prev_steering: f32,
 }
 
-impl VehicleState {
+impl<'a> VehicleState<'a> {
     fn interpolate(&self, interp: f32) -> (Vector, Mtx) {
         let pos = (self.vehicle.position * interp) + (self.prev_pos * (1.0 - interp));
 
@@ -46,13 +46,16 @@ impl CameraState {
     }
 }
 
-pub struct GameState {
-    vehicle_states: Vec<VehicleState>,
+pub struct GameState<'a> {
+    vehicle_states: Vec<VehicleState<'a>>,
 
-    octree: bindings::Octree,
+    pub spline: bindings::Spline,
+    pub octree: bindings::Octree,
 
     camera: CameraState,
     prev_camera: CameraState,
+
+    pub renderer: Renderer,
 }
 
 // (0, sin(PI / -8), cos(PI / -8))
@@ -63,17 +66,19 @@ fn adjust_normal(up: Vector, normal: Vector) -> Vector {
     (normal - up * normal.dot(&up)).normalized()
 }
 
-impl GameState {
-    pub fn new(octree: bindings::Octree) -> Self {
+impl<'a> GameState<'a> {
+    pub fn new(spline: bindings::Spline, octree: bindings::Octree, renderer: Renderer) -> Self {
         Self {
             vehicle_states: vec![],
+            spline,
             octree,
             camera: CameraState::default(),
             prev_camera: CameraState::default(),
+            renderer,
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, ty: &'static bindings::VehicleType, controller: &'static mut bindings::VehicleController) -> bool {
+    pub fn spawn(&mut self, pos: Vector, ty: &'a bindings::VehicleType, controller: &'a dyn VehicleController) -> bool {
         if self.vehicle_states.len() == bindings::MAX_VEHICLES as usize {
             return false;
         }
@@ -143,7 +148,7 @@ impl GameState {
             state.prev_pos = state.vehicle.position;
             state.prev_rot = state.vehicle.rotation;
             state.prev_steering = state.vehicle.steering;
-            state.vehicle.update(unsafe { &mut bindings::gSpline }, &mut self.octree);
+            state.vehicle.update(&self.spline, &self.octree);
 
             total_translations.push(Vector::ZERO);
             original_velocity.push(state.vehicle.velocity);
@@ -200,7 +205,7 @@ impl GameState {
         let interp_camera_target = (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
         let interp_camera_up = (self.camera.up * interp) + (self.prev_camera.up * (1.0 - interp));
 
-        RENDERER.lock().unwrap().set_camera(
+        self.renderer.set_camera(
             interp_camera_pos,
             interp_camera_target,
             interp_camera_up,
@@ -208,18 +213,10 @@ impl GameState {
 
         for state in &self.vehicle_states {
             let (pos, rot) = state.interpolate(interp);
-            let mut pos_write = [0.0f32; 3];
-            let mut rot_write = [[0.0f32; 3]; 3];
-            pos.write(&mut pos_write as *mut f32);
-            rot.write(&mut rot_write as *mut [f32; 3]);
-            unsafe {
-                bindings::mesh_render(&state.vehicle.ty.mesh as *const bindings::Mesh, &mut pos_write as *mut f32, &mut rot_write as *mut [f32; 3]);
-            }
+            state.vehicle.ty.mesh.render(&self.renderer, pos, rot);
         }
 
-        unsafe {
-            bindings::render_spline();
-        }
+        self.renderer.render_spline();
 
         if ui_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[ui_focus].vehicle;
@@ -230,51 +227,7 @@ impl GameState {
             if v.dot(&forward) < 0.0 {
                 speed *= -1.0;
             }
-            render_write!(RENDERER.lock().unwrap(), 6.0, 18.0, 2.0, "SPEED {:.2}", speed);
+            render_write!(self.renderer, 6.0, 18.0, 2.0, "SPEED {:.2}", speed);
         }
     }
-}
-
-unsafe impl Send for GameState{}
-
-static STATE: Mutex<Option<GameState>> = Mutex::new(None);
-
-#[no_mangle]
-pub extern "C" fn game_state_init(spline_asset: *mut bindings::Asset) -> bool {
-    unsafe {
-        if let Some(spline) = bindings::Spline::load(&mut *spline_asset) {
-            bindings::gSpline = spline;
-        } else {
-            return false;
-        }
-
-        let mut octree = zeroed::<bindings::Octree>();
-        bindings::octree_init(&mut octree as *mut bindings::Octree, &bindings::gSpline as *const bindings::Spline);
-
-        let state = GameState::new(octree);
-
-        *STATE.lock().unwrap() = Some(state);
-
-        true
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn game_state_spawn(pos: *const f32, ty: *const bindings::VehicleType, controller: *mut bindings::VehicleController) -> bool {
-    STATE.lock().unwrap().as_mut().unwrap().spawn(Vector::from(pos), unsafe { &*ty }, unsafe { &mut *controller })
-}
-
-#[no_mangle]
-pub extern "C" fn game_state_teleport_camera(focus: u8) {
-    STATE.lock().unwrap().as_mut().unwrap().teleport_camera(focus as usize);
-}
-
-#[no_mangle]
-pub extern "C" fn game_state_update(focus: u8) {
-    STATE.lock().unwrap().as_mut().unwrap().update(focus as usize);
-}
-
-#[no_mangle]
-pub extern "C" fn game_state_render(focus: u8, interp: f32) {
-    STATE.lock().unwrap().as_mut().unwrap().render(focus as usize, interp);
 }

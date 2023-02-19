@@ -6,14 +6,7 @@ LIBRARY := libcondux.a
 BUILDDIR := build
 SRCDIR := src
 
-CFILES := \
-	$(SRCDIR)/assets.c \
-	$(SRCDIR)/collision.c \
-	$(SRCDIR)/input.c \
-	$(SRCDIR)/linalg.c \
-	$(SRCDIR)/main.c \
-	$(SRCDIR)/state.c \
-	$(SRCDIR)/vehicle.c
+CFILES := $(SRCDIR)/assets.c
 
 CFLAGS := -Wall -Oz -Iinclude -Ibuild
 

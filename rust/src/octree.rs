@@ -270,8 +270,3 @@ impl bindings::Octree {
         }
     }
 }
-
-#[no_mangle]
-pub extern "C" fn octree_init(tree: *mut bindings::Octree, spline: *const bindings::Spline) {
-    *unsafe { &mut *tree } = bindings::Octree::new(unsafe { &*spline });
-}

@@ -57,11 +57,6 @@ typedef struct {
     Mesh mesh;
 } VehicleType;
 
-typedef struct VehicleController {
-    float (*getSteering) (struct VehicleController *self);
-    float (*getPedal) (struct VehicleController *self);
-} VehicleController;
-
 typedef struct {
     /** The number of control points on the spline. */
     uint8_t numPoints;

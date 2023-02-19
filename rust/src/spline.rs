@@ -232,24 +232,3 @@ impl bindings::Spline {
         (offset + d, dist)
     }
 }
-
-#[no_mangle]
-pub extern "C" fn spline_get_baked(spline: *const bindings::Spline, offset: f32, v: *mut f32) {
-    unsafe { &*spline }.get_baked(offset).write(v);
-}
-
-#[no_mangle]
-pub extern "C" fn spline_get_tilt(spline: *const bindings::Spline, offset: f32) -> f32 {
-    unsafe { &*spline }.get_tilt(offset)
-}
-
-#[no_mangle]
-pub extern "C" fn spline_get_up_right(spline: *const bindings::Spline, offset: f32, up: *mut f32, right: *mut f32) {
-    let (upv, rightv) = unsafe { &*spline }.get_up_right(offset);
-    if !up.is_null() {
-        upv.write(up);
-    }
-    if !right.is_null() {
-        rightv.write(right);
-    }
-}

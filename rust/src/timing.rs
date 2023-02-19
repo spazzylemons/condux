@@ -1,8 +1,4 @@
-use std::{sync::Mutex};
-
 use crate::bindings;
-
-static TIMER: Mutex<Option<Timer>> = Mutex::new(None);
 
 pub struct Timer {
     start_ms: u64,
@@ -41,18 +37,4 @@ impl Timer {
             * ((bindings::TICKS_PER_SECOND as f32) / 1000.0))).clamp(0.0, 1.0);
         (ticks, interp)
     }
-}
-
-#[no_mangle]
-pub extern "C" fn timing_init() {
-    *TIMER.lock().unwrap() = Some(Timer::new());
-}
-
-#[no_mangle]
-pub extern "C" fn timing_num_ticks(interpolation: *mut f32) -> u16 {
-    let (ticks, interp) = TIMER.lock().unwrap().as_mut().unwrap().frame_ticks();
-    unsafe {
-        *interpolation = interp;
-    }
-    ticks
 }
