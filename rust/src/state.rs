@@ -137,9 +137,7 @@ impl GameState {
         let mut original_velocity = vec![];
         let mut momentum_neighbors = vec![];
 
-        unsafe {
-            bindings::octree_reset_vehicles(&mut self.octree as *mut bindings::Octree);
-        }
+        self.octree.reset_vehicles();
 
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
             state.prev_pos = state.vehicle.position;
@@ -154,21 +152,15 @@ impl GameState {
 
             let mut position_write = [0.0f32; 3];
             state.vehicle.position.write(&mut position_write as *mut f32);
-            unsafe {
-                bindings::octree_add_vehicle(&mut self.octree as *mut bindings::Octree, &mut position_write as *mut f32, i as i32);
-            }
+            self.octree.add_vehicle(state.vehicle.position, i);
         }
 
         // next, find any collisions between vehicles
         for i in 0..self.vehicle_states.len() {
-            let mut octree_collisions = [0u8; bindings::MAX_VEHICLES as usize];
             let mut position_write = [0.0f32; 3];
             self.vehicle_states[i].vehicle.position.write(&mut position_write as *mut f32);
-            let n = unsafe {
-                bindings::octree_find_collisions(&mut self.octree as *mut bindings::Octree, &mut position_write as *mut f32, &mut octree_collisions as *mut u8)
-            };
-            for j in &octree_collisions[0..n as usize] {
-                let j = *j as usize;
+            let collisions = self.octree.find_vehicle_collisions(&self.vehicle_states[i].vehicle.position);
+            for j in collisions {
                 if j <= i {
                     continue;
                 }
