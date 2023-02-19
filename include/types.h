@@ -107,7 +107,7 @@ typedef struct {
 typedef struct OctreeNode {
     int segments;
     int vehicles;
-    struct OctreeNode *children;
+    int children_index;
 } OctreeNode;
 
 #define OCTREE_POOL_SIZE (8 + 64 + 512)

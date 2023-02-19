@@ -1,6 +1,7 @@
 pub mod bindings;
 pub mod linalg;
 pub mod input;
+pub mod state;
 pub mod timing;
 pub mod vehicle;
 

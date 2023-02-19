@@ -44,7 +44,7 @@ macro_rules! auto_assign {
     };
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Vector {
     pub x: f32,
     pub y: f32,
@@ -52,10 +52,10 @@ pub struct Vector {
 }
 
 impl Vector {
-    pub const ZERO: Vector = Self::new(0.0, 0.0, 0.0);
-    pub const X_AXIS: Vector = Self::new(1.0, 0.0, 0.0);
-    pub const Y_AXIS: Vector = Self::new(0.0, 1.0, 0.0);
-    pub const Z_AXIS: Vector = Self::new(0.0, 0.0, 1.0);
+    pub const ZERO: Self = Self::new(0.0, 0.0, 0.0);
+    pub const X_AXIS: Self = Self::new(1.0, 0.0, 0.0);
+    pub const Y_AXIS: Self = Self::new(0.0, 1.0, 0.0);
+    pub const Z_AXIS: Self = Self::new(0.0, 0.0, 1.0);
 
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
@@ -177,7 +177,7 @@ impl DivAssign<f32> for Vector {
 
 auto_assign! { Div, div, div_assign, Vector, f32 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Quat {
     pub w: f32,
     pub x: f32,
@@ -186,7 +186,9 @@ pub struct Quat {
 }
 
 impl Quat {
-    pub fn new(w: f32, x: f32, y: f32, z: f32) -> Self {
+    pub const IDENT: Self = Self::new(1.0, 0.0, 0.0, 0.0);
+
+    pub const fn new(w: f32, x: f32, y: f32, z: f32) -> Self {
         Self { w, x, y, z }
     }
 

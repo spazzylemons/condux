@@ -279,10 +279,10 @@ static float get_closest(const Spline *spline, const Octree *tree, const Vec poi
             segment = tree->segmentNext[segment];
         }
 
-        if (current->children == NULL) {
+        if (current->children_index == -1) {
             break;
         }
-        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
+        current = &tree->childPool[current->children_index + (which[0] | (which[1] << 1) | (which[2] << 2))];
     }
 
     return nearest;

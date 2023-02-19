@@ -56,14 +56,14 @@ static void build_octree(OctreeNode *node, OctreeNode *childPool, int depth, siz
     node->segments = -1;
     if (depth >= MAX_DEPTH) {
         // if at max depth, we don't add children
-        node->children = NULL;
+        node->children_index = -1;
         return;
     }
     // add children
-    node->children = &childPool[*w];
+    node->children_index = *w;
     *w += 8;
     for (int i = 0; i < 8; i++) {
-        build_octree(&node->children[i], childPool, depth + 1, w);
+        build_octree(&childPool[node->children_index + i], childPool, depth + 1, w);
     }
 }
 
@@ -92,11 +92,11 @@ static void add_node(Octree *tree, const Vec segment_min, const Vec segment_max,
             }
         }
 
-        if (which[0] < 0 || which[1] < 0 || which[2] < 0 || current->children == NULL) {
+        if (which[0] < 0 || which[1] < 0 || which[2] < 0 || current->children_index == -1) {
             break;
         }
 
-        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
+        current = &tree->childPool[current->children_index + (which[0] | (which[1] << 1) | (which[2] << 2))];
     }
     // add to list
     tree->segmentSides[segment] = 0;
@@ -174,11 +174,11 @@ void octree_add_vehicle(Octree *tree, const Vec pos, int index) {
             }
         }
 
-        if (which[0] < 0 || which[1] < 0 || which[2] < 0 || current->children == NULL) {
+        if (which[0] < 0 || which[1] < 0 || which[2] < 0 || current->children_index == -1) {
             break;
         }
 
-        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
+        current = &tree->childPool[current->children_index + (which[0] | (which[1] << 1) | (which[2] << 2))];
     }
     // add to list
     tree->vehicleSides[index] = 0;
@@ -235,10 +235,10 @@ uint8_t octree_find_collisions(Octree *tree, const Vec point, uint8_t *out) {
             index = tree->vehicleNext[index];
         }
 
-        if (current->children == NULL) {
+        if (current->children_index == -1) {
             break;
         }
-        current = &current->children[which[0] | (which[1] << 1) | (which[2] << 2)];
+        current = &tree->childPool[current->children_index + (which[0] | (which[1] << 1) | (which[2] << 2))];
     }
 
     return result;
