@@ -12,7 +12,6 @@ CFILES := \
 	$(SRCDIR)/input.c \
 	$(SRCDIR)/linalg.c \
 	$(SRCDIR)/main.c \
-	$(SRCDIR)/spline.c \
 	$(SRCDIR)/state.c \
 	$(SRCDIR)/vehicle.c
 

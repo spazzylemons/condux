@@ -242,7 +242,9 @@ static STATE: Mutex<Option<GameState>> = Mutex::new(None);
 #[no_mangle]
 pub extern "C" fn game_state_init(spline_asset: *mut bindings::Asset) -> bool {
     unsafe {
-        if !bindings::spline_load(&mut bindings::gSpline as *mut bindings::Spline, spline_asset) {
+        if let Some(spline) = bindings::Spline::load(&mut *spline_asset) {
+            bindings::gSpline = spline;
+        } else {
             return false;
         }
 

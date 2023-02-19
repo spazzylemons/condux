@@ -1,4 +1,4 @@
-use std::{sync::Mutex, mem::zeroed, ffi::CString, ptr::null_mut, fmt::Write};
+use std::{sync::Mutex, mem::zeroed, ffi::CString, fmt::Write};
 
 use crate::{linalg::{Vector, Mtx}, bindings};
 
@@ -10,26 +10,17 @@ struct Glyph {
 
 impl Glyph {
     fn load(asset: &mut bindings::Asset) -> Option<Glyph> {
-        let mut ranges = 0u8;
-        if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut ranges as *mut u8) } {
-            return None;
-        }
+        let ranges = asset.read_byte()?;
         let num_points = (ranges & 15) as usize;
         let num_lines = (ranges >> 4) as usize;
         let mut points = Vec::with_capacity(num_points);
         for _ in 0..num_points {
-            let mut p = 0u8;
-            if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut p as *mut u8) } {
-                return None;
-            }
+            let p = asset.read_byte()?;
             points.push((p & 15, p >> 4));
         }
         let mut lines = Vec::with_capacity(num_lines);
         for _ in 0..num_lines {
-            let mut p = 0u8;
-            if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut p as *mut u8) } {
-                return None;
-            }
+            let p = asset.read_byte()?;
             let (i, j) = (p & 15, p >> 4);
             if i as usize >= num_points || j as usize >= num_points {
                 return None;
@@ -116,14 +107,9 @@ impl Renderer {
         self.spline_points.clear();
         let mut d = 0.0;
         while d < spline.length {
-            let mut p = [0.0f32; 3];
-            let mut r = [0.0f32; 3];
-            unsafe {
-                bindings::spline_get_baked(spline as *const bindings::Spline, d, &mut p as *mut f32);
-                bindings::spline_get_up_right(spline as *const bindings::Spline, d, null_mut(), &mut r as *mut f32);
-            }
-            let p = Vector::from(p);
-            let r = Vector::from(r) * bindings::SPLINE_TRACK_RADIUS as f32;
+            let p = spline.get_baked(d);
+            let (_, r) = spline.get_up_right(d);
+            let r = r * bindings::SPLINE_TRACK_RADIUS as f32;
             self.spline_points.push((p - r, p + r));
             d += 1.0;
         }
@@ -194,39 +180,27 @@ pub static RENDERER: Mutex<Renderer> = Mutex::new(Renderer {
 impl bindings::Mesh {
     pub fn load(asset: &mut bindings::Asset) -> Option<bindings::Mesh> {
         let mut mesh = unsafe { zeroed::<bindings::Mesh>() };
-        let mut num_vertices = 0u8;
-        if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut num_vertices as *mut u8) } {
-            return None;
-        }
+        let num_vertices = asset.read_byte()?;
         mesh.numVertices = num_vertices;
         let num_vertices = num_vertices as usize;
         if num_vertices > bindings::MAX_MESH_VERTICES as usize {
             return None;
         }
         for i in 0..num_vertices {
-            if !unsafe { bindings::asset_read_vec(asset as *mut bindings::Asset, &mut mesh.vertices[i] as *mut f32) } {
-                return None;
-            }
+            asset.read_vector()?.write(&mut mesh.vertices[i] as *mut f32);
         }
-        let mut num_lines = 0u8;
-        if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut num_lines as *mut u8) } {
-            return None;
-        }
+        let num_lines = asset.read_byte()?;
         mesh.numLines = num_lines;
         let num_lines = num_lines as usize;
         if num_lines > bindings::MAX_MESH_LINES as usize {
             return None;
         }
         for i in 0..num_lines {
-            if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut mesh.line1[i] as *mut u8) } {
-                return None;
-            }
+            mesh.line1[i] = asset.read_byte()?;
             if mesh.line1[i] >= mesh.numVertices {
                 return None;
             }
-            if !unsafe { bindings::asset_read_byte(asset as *mut bindings::Asset, &mut mesh.line2[i] as *mut u8) } {
-                return None;
-            }
+            mesh.line2[i] = asset.read_byte()?;
             if mesh.line2[i] >= mesh.numVertices {
                 return None;
             }

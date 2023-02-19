@@ -5,8 +5,6 @@
 
 #include <stdbool.h>
 
-bool spline_load(Spline *spline, Asset *asset);
-
 float spline_get_tilt(const Spline *spline, float offset);
 
 void spline_get_baked(const Spline *spline, float offset, Vec v);

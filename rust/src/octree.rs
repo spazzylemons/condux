@@ -18,13 +18,8 @@ fn get_bounds(spline: &bindings::Spline, i: usize) -> (Vector, Vector) {
     let mut max = Vector::MIN;
     for b in [spline.baked[i], spline.baked[(i + 1) % spline.numBaked]] {
         let point = Vector::from(b.point);
-        let mut up_write = [0.0f32; 3];
-        let mut right_write = [0.0f32; 3];
-        unsafe {
-            bindings::spline_get_up_right(spline, b.offset, &mut up_write as *mut f32, &mut right_write as *mut f32);
-        }
-        let up = Vector::from(up_write);
-        let right = Vector::from(right_write) * bindings::SPLINE_TRACK_RADIUS as f32;
+        let (up, right) = spline.get_up_right(b.offset);
+        let right = right * bindings::SPLINE_TRACK_RADIUS as f32;
         let above = up * bindings::MAX_GRAVITY_HEIGHT as f32;
         let below = up * -bindings::COLLISION_DEPTH as f32;
         check_bounds(above - right + point, &mut min, &mut max);
@@ -232,6 +227,40 @@ impl bindings::Octree {
                     result.push(i);
                 }
                 index = self.vehicleNext[i];
+            }
+
+            if current.children_index == -1 {
+                break result;
+            }
+            current = &self.childPool[current.children_index as usize + existing_pool_index(&which)];
+        }
+    }
+
+    pub fn find_closest_offset(&self, spline: &bindings::Spline, point: Vector) -> f32 {
+        let mut search_min = Vector::from(self.min);
+        let mut search_max = Vector::from(self.max);
+        let mut current = &self.root;
+        let mut result = 0.0;
+        let mut best_dist_sq = f32::INFINITY;
+        loop {
+            let which = search_existing_octree(&point, &mut search_min, &mut search_max);
+
+            let mut index = current.segments;
+            while index >= 0 {
+                let i = index as usize;
+                if !(which[0] && (self.segmentSides[i] & 1) != 0) &&
+                    !(!which[0] && (self.segmentSides[i] & 2) != 0) &&
+                    !(which[1] && (self.segmentSides[i] & 4) != 0) &&
+                    !(!which[1] && (self.segmentSides[i] & 8) != 0) &&
+                    !(which[2] && (self.segmentSides[i] & 16) != 0) &&
+                    !(!which[2] && (self.segmentSides[i] & 32) != 0) {
+                    let (offset, dist_sq) = spline.get_offset_and_dist_sq(point, i);
+                    if dist_sq < best_dist_sq {
+                        best_dist_sq = dist_sq;
+                        result = offset;
+                    }
+                }
+                index = self.segmentNext[i];
             }
 
             if current.children_index == -1 {

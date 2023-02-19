@@ -89,12 +89,8 @@ impl Vehicle {
     }
 
     fn collide_with_spline(&mut self, spline: &bindings::Spline, tree: &bindings::Octree) -> Vector {
-        let mut up_pass = [0.0f32, 0.0f32, 0.0f32];
-        let mut position_write = [0.0f32, 0.0f32, 0.0f32];
-        let mut height = 0.0f32;
         let mut new_gravity_vector = Vector::Y_AXIS;
-        self.position.write(&mut position_write as *mut f32);
-        if unsafe { bindings::spline_get_up_height(spline as *const bindings::Spline, tree as *const bindings::Octree, &mut position_write as *mut f32, &mut up_pass as *mut f32, &mut height as *mut f32) } {
+        if let Some((up, height)) = spline.get_up_height(tree, self.position) {
             if height <= 0.0 && height > -bindings::COLLISION_DEPTH as f32 {
                 self.velocity = self.velocity_without_gravity();
                 // collided with floor, apply some friction
@@ -106,14 +102,14 @@ impl Vehicle {
                     // otherwise, use friction
                     self.velocity = with_friction;
                 }
-                self.position -= Vector::from(up_pass) * height;
+                self.position -= up * height;
             }
             if height > -bindings::COLLISION_DEPTH as f32 && height < bindings::MAX_GRAVITY_HEIGHT as f32 {
-                height -= GRAVITY_FALLOFF_POINT;
-                height /= bindings::MAX_GRAVITY_HEIGHT as f32 - GRAVITY_FALLOFF_POINT;
-                height = height.clamp(0.0, 1.0);
+                let height = height - GRAVITY_FALLOFF_POINT;
+                let height = height / bindings::MAX_GRAVITY_HEIGHT as f32 - GRAVITY_FALLOFF_POINT;
+                let height = height.clamp(0.0, 1.0);
                 new_gravity_vector *= height;
-                new_gravity_vector += Vector::from(up_pass) * (1.0 - height);
+                new_gravity_vector += up * (1.0 - height);
                 // TODO is this necessary?
                 new_gravity_vector = new_gravity_vector.normalized();
             }

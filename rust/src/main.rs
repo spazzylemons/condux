@@ -1,9 +1,11 @@
+pub mod assets;
 pub mod bindings;
 pub mod linalg;
 pub mod input;
 pub mod octree;
 #[macro_use]
 pub mod render;
+pub mod spline;
 pub mod state;
 pub mod timing;
 pub mod vehicle;
