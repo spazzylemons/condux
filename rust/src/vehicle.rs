@@ -6,55 +6,39 @@ const FRICTION_COEFFICIENT: f32 = 0.1;
 const GRAVITY_FALLOFF_POINT: f32 = 2.0;
 const STEERING_APPROACH_SPEED: f32 = 6.0;
 
-impl bindings::Vehicle {
-    pub fn position(&self) -> Vector {
-        Vector::from(self.position)
-    }
+pub struct Vehicle {
+    pub position: Vector,
+    pub rotation: Quat,
+    pub velocity: Vector,
+    pub steering: f32,
+    pub ty: &'static bindings::VehicleType,
+    pub controller: &'static mut bindings::VehicleController,
+}
 
-    pub fn set_position(&mut self, v: Vector) {
-        self.position = v.into();
-    }
-
-    pub fn rotation(&self) -> Quat {
-        Quat::from(self.rotation)
-    }
-
-    pub fn set_rotation(&mut self, q: Quat) {
-        self.rotation = q.into();
-    }
-
-    pub fn velocity(&self) -> Vector {
-        Vector::from(self.velocity)
-    }
-
-    pub fn set_velocity(&mut self, v: Vector) {
-        self.velocity = v.into();
-    }
-
+impl Vehicle {
     pub fn up_vector(&self) -> Vector {
-        Mtx::from(self.rotation()) * Vector::Y_AXIS
+        Mtx::from(self.rotation) * Vector::Y_AXIS
     }
 
     pub fn forward_vector(&self) -> Vector {
-        Mtx::from(self.rotation()) * Vector::Z_AXIS
+        Mtx::from(self.rotation) * Vector::Z_AXIS
     }
 
     pub fn gravity(&self) -> Vector {
         let up = self.up_vector();
         // amount of gravity being experienced
-        up * self.velocity().dot(&up)
+        up * self.velocity.dot(&up)
     }
 
     pub fn velocity_without_gravity(&self) -> Vector {
-        self.velocity() - self.gravity()
+        self.velocity - self.gravity()
     }
 
     fn handle_steering(&mut self) {
         let steering = unsafe { (&*self.controller).getSteering.unwrap()(self.controller) };
         // local rotate for steering
-        let steering_rotation = Quat::axis_angle(&Vector::Y_AXIS, -steering * (unsafe { &*self.type_ }).handling * (bindings::TICK_DELTA as f32));
-        let new_rotation = steering_rotation * self.rotation();
-        self.set_rotation(new_rotation);
+        let steering_rotation = Quat::axis_angle(&Vector::Y_AXIS, -steering * self.ty.handling * (bindings::TICK_DELTA as f32));
+        self.rotation = steering_rotation * self.rotation;
         // smooth steering visual
         self.steering = steering * STEERING_APPROACH_SPEED * (bindings::TICK_DELTA as f32)
             + self.steering / (1.0 + (STEERING_APPROACH_SPEED * (bindings::TICK_DELTA as f32)));
@@ -62,7 +46,7 @@ impl bindings::Vehicle {
 
     fn apply_acceleration_no_speed_cap(&mut self, without: &mut Vector, forward: Vector) {
         let pedal = unsafe { (&*self.controller).getPedal.unwrap()(self.controller) };
-        *without += forward * (pedal * (unsafe { &*self.type_ }).acceleration * (bindings::TICK_DELTA as f32));
+        *without += forward * (pedal * self.ty.acceleration * (bindings::TICK_DELTA as f32));
     }
 
     fn approach_aligned_without_gravity(&mut self, forward: Vector, without: &mut Vector) {
@@ -72,7 +56,7 @@ impl bindings::Vehicle {
         let length = without.mag();
         *without = without.normalized();
 
-        let anti_drift = unsafe { &*self.type_ }.antiDrift;
+        let anti_drift = self.ty.antiDrift;
         let v = if f.dot(without) > b.dot(without) {
             without.approach(anti_drift, &f)
         } else {
@@ -87,40 +71,42 @@ impl bindings::Vehicle {
         let up = self.up_vector();
         let forward = self.forward_vector();
         // apply gravity
-        self.set_velocity(self.velocity() - (up * (GRAVITY_STRENGTH * (bindings::TICK_DELTA as f32))));
+        self.velocity -= up * (GRAVITY_STRENGTH * (bindings::TICK_DELTA as f32));
         // get amount of gravity being experienced
         let gravity = self.gravity();
-        let mut without = self.velocity() - gravity;
+        let mut without = self.velocity - gravity;
         self.apply_acceleration_no_speed_cap(&mut without, forward);
         // speed cap
-        let speed = unsafe { &*self.type_ }.speed;
+        let speed = self.ty.speed;
         if without.mag_sq() > speed * speed {
             without = without.normalized() * speed;
         }
         self.approach_aligned_without_gravity(forward, &mut without);
         // combine parts of velocity
-        self.set_velocity(gravity + without);
+        self.velocity = gravity + without;
         // slide with physics
-        self.set_position(self.position() + (self.velocity() * (bindings::TICK_DELTA as f32)));
+        self.position += self.velocity * (bindings::TICK_DELTA as f32);
     }
 
     fn collide_with_spline(&mut self, spline: &bindings::Spline, tree: &bindings::Octree) -> Vector {
         let mut up_pass = [0.0f32, 0.0f32, 0.0f32];
+        let mut position_write = [0.0f32, 0.0f32, 0.0f32];
         let mut height = 0.0f32;
         let mut new_gravity_vector = Vector::Y_AXIS;
-        if unsafe { bindings::spline_get_up_height(spline as *const bindings::Spline, tree as *const bindings::Octree, &mut self.position as *mut f32, &mut up_pass as *mut f32, &mut height as *mut f32) } {
+        self.position.write(&mut position_write as *mut f32);
+        if unsafe { bindings::spline_get_up_height(spline as *const bindings::Spline, tree as *const bindings::Octree, &mut position_write as *mut f32, &mut up_pass as *mut f32, &mut height as *mut f32) } {
             if height <= 0.0 && height > -bindings::COLLISION_DEPTH as f32 {
-                self.set_velocity(self.velocity_without_gravity());
+                self.velocity = self.velocity_without_gravity();
                 // collided with floor, apply some friction
-                let with_friction = self.velocity() - self.velocity().normalized() * FRICTION_COEFFICIENT * GRAVITY_STRENGTH * (bindings::TICK_DELTA as f32);
-                if with_friction.dot(&self.velocity()) <= 0.0 {
+                let with_friction = self.velocity - self.velocity.normalized() * FRICTION_COEFFICIENT * GRAVITY_STRENGTH * (bindings::TICK_DELTA as f32);
+                if with_friction.dot(&self.velocity) <= 0.0 {
                     // if dot product is flipped, direction flipped, so set velocity to zero
-                    self.set_velocity(Vector::ZERO);
+                    self.velocity = Vector::ZERO;
                 } else {
                     // otherwise, use friction
-                    self.set_velocity(with_friction);
+                    self.velocity = with_friction;
                 }
-                self.set_position(self.position() + Vector::from(up_pass) * -height);
+                self.position -= Vector::from(up_pass) * height;
             }
             if height > -bindings::COLLISION_DEPTH as f32 && height < bindings::MAX_GRAVITY_HEIGHT as f32 {
                 height -= GRAVITY_FALLOFF_POINT;
@@ -145,8 +131,7 @@ impl bindings::Vehicle {
         // TODO handle the latter case
         if alignment.mag_sq() > 0.0 {
             let rotation_quat = Quat::axis_angle(&alignment, up.signed_angle(&approach_up, &alignment));
-            let new_rotation = self.rotation() * rotation_quat;
-            self.set_rotation(new_rotation);
+            self.rotation *= rotation_quat;
         }
     }
 
@@ -154,28 +139,6 @@ impl bindings::Vehicle {
         self.update_physics();
         self.update_collision(spline, tree);
         // normalize rotation
-        self.set_rotation(self.rotation().normalized());
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn vehicle_up_vector(vehicle: *const bindings::Vehicle, v: *mut f32) {
-    (unsafe { &*vehicle }).up_vector().write(v);
-}
-
-#[no_mangle]
-pub extern "C" fn vehicle_forward_vector(vehicle: *const bindings::Vehicle, v: *mut f32) {
-    (unsafe { &*vehicle }).forward_vector().write(v);
-}
-
-#[no_mangle]
-pub extern "C" fn vehicle_velocity_without_gravity(vehicle: *const bindings::Vehicle, v: *mut f32) {
-    (unsafe { &*vehicle }).velocity_without_gravity().write(v);
-}
-
-#[no_mangle]
-pub extern "C" fn vehicle_update(vehicle: *mut bindings::Vehicle, spline: *const bindings::Spline, tree: *const bindings::Octree) {
-    unsafe {
-        (&mut *vehicle).update(&*spline, &*tree);
+        self.rotation = self.rotation.normalized();
     }
 }

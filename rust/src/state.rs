@@ -1,6 +1,6 @@
-use std::{sync::Mutex, mem::zeroed};
+use std::{fmt::Write, sync::Mutex, mem::zeroed};
 
-use crate::{bindings, linalg::{Vector, Quat, Mtx, Length}};
+use crate::{bindings, linalg::{Vector, Quat, Mtx, Length}, vehicle::Vehicle, render::RENDERER};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -8,7 +8,7 @@ const CAMERA_UP_DISTANCE: f32 = 0.325;
 const STEERING_FACTOR: f32 = 0.25;
 
 struct VehicleState {
-    vehicle: bindings::Vehicle,
+    vehicle: Vehicle,
     prev_pos: Vector,
     prev_rot: Quat,
     prev_steering: f32,
@@ -16,10 +16,10 @@ struct VehicleState {
 
 impl VehicleState {
     fn interpolate(&self, interp: f32) -> (Vector, Mtx) {
-        let pos = (self.vehicle.position() * interp) + (self.prev_pos * (1.0 - interp));
+        let pos = (self.vehicle.position * interp) + (self.prev_pos * (1.0 - interp));
 
         let prev_vehicle_rot = self.prev_rot;
-        let cur_vehicle_rot = self.vehicle.rotation();
+        let cur_vehicle_rot = self.vehicle.rotation;
         let prev_roll = Quat::axis_angle(&Vector::Z_AXIS, self.prev_steering * STEERING_FACTOR);
         let cur_roll = Quat::axis_angle(&Vector::Z_AXIS, self.vehicle.steering * STEERING_FACTOR);
         let prev_quat = prev_roll * prev_vehicle_rot;
@@ -39,8 +39,8 @@ struct CameraState {
 }
 
 impl CameraState {
-    fn look_at(&mut self, vehicle: &bindings::Vehicle) {
-        self.target = vehicle.position();
+    fn look_at(&mut self, vehicle: &Vehicle) {
+        self.target = vehicle.position;
         self.up = vehicle.up_vector();
         self.target += self.up * CAMERA_UP_DISTANCE;
     }
@@ -73,24 +73,22 @@ impl GameState {
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, ty: *const bindings::VehicleType, controller: *mut bindings::VehicleController) -> bool {
+    pub fn spawn(&mut self, pos: Vector, ty: &'static bindings::VehicleType, controller: &'static mut bindings::VehicleController) -> bool {
         if self.vehicle_states.len() == bindings::MAX_VEHICLES as usize {
             return false;
         }
     
-        let mut vehicle = bindings::Vehicle {
-            position: [0.0, 0.0, 0.0],
-            rotation: [0.0, 0.0, 0.0, 0.0],
-            velocity: [0.0, 0.0, 0.0],
-            type_: ty,
+        let vehicle = Vehicle {
+            position: pos,
+            rotation: Quat::IDENT,
+            velocity: Vector::ZERO,
+            ty,
             controller,
             steering: 0.0,
         };
-        vehicle.set_position(pos);
-        vehicle.set_rotation(Quat::IDENT);
     
-        let prev_pos = vehicle.position();
-        let prev_rot = vehicle.rotation();
+        let prev_pos = vehicle.position;
+        let prev_rot = vehicle.rotation;
         let prev_steering = vehicle.steering;
     
         let vehicle_state = VehicleState { vehicle, prev_pos, prev_rot, prev_steering };
@@ -99,9 +97,9 @@ impl GameState {
         true
     }
 
-    fn target_pos(&self, vehicle: &bindings::Vehicle) -> Vector {
-        let offset = Mtx::from(vehicle.rotation()) * TARGET_ANGLE;
-        vehicle.position() - offset * CAMERA_FOLLOW_DISTANCE
+    fn target_pos(&self, vehicle: &Vehicle) -> Vector {
+        let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
+        vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
     }
 
     fn update_camera_pos(&mut self, focus: usize) {
@@ -111,8 +109,8 @@ impl GameState {
 
         self.prev_camera = self.camera.clone();
         // set ourselves to the proper distance
-        let tmp = Vector::Z_AXIS * (self.vehicle_states[focus].vehicle.position().dist(self.camera.pos) - CAMERA_FOLLOW_DISTANCE);
-        let delta = self.camera.pos - self.vehicle_states[focus].vehicle.position();
+        let tmp = Vector::Z_AXIS * (self.vehicle_states[focus].vehicle.position.dist(self.camera.pos) - CAMERA_FOLLOW_DISTANCE);
+        let delta = self.camera.pos - self.vehicle_states[focus].vehicle.position;
         let up = self.vehicle_states[focus].vehicle.up_vector();
         let camera_mtx = Mtx::looking_at(delta, up);
         let translation_global = camera_mtx * tmp;
@@ -144,26 +142,30 @@ impl GameState {
         }
 
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
-            state.prev_pos = state.vehicle.position();
-            state.prev_rot = state.vehicle.rotation();
+            state.prev_pos = state.vehicle.position;
+            state.prev_rot = state.vehicle.rotation;
             state.prev_steering = state.vehicle.steering;
             state.vehicle.update(unsafe { &mut bindings::gSpline }, &mut self.octree);
 
             total_translations.push(Vector::ZERO);
-            original_velocity.push(state.vehicle.velocity());
-            state.vehicle.set_velocity(Vector::ZERO);
+            original_velocity.push(state.vehicle.velocity);
+            state.vehicle.velocity = Vector::ZERO;
             momentum_neighbors.push(vec![i]);
 
+            let mut position_write = [0.0f32; 3];
+            state.vehicle.position.write(&mut position_write as *mut f32);
             unsafe {
-                bindings::octree_add_vehicle(&mut self.octree as *mut bindings::Octree, &mut state.vehicle.position as *mut f32, i as i32);
+                bindings::octree_add_vehicle(&mut self.octree as *mut bindings::Octree, &mut position_write as *mut f32, i as i32);
             }
         }
 
         // next, find any collisions between vehicles
         for i in 0..self.vehicle_states.len() {
             let mut octree_collisions = [0u8; bindings::MAX_VEHICLES as usize];
+            let mut position_write = [0.0f32; 3];
+            self.vehicle_states[i].vehicle.position.write(&mut position_write as *mut f32);
             let n = unsafe {
-                bindings::octree_find_collisions(&mut self.octree as *mut bindings::Octree, &mut self.vehicle_states[i].vehicle.position as *mut f32, &mut octree_collisions as *mut u8)
+                bindings::octree_find_collisions(&mut self.octree as *mut bindings::Octree, &mut position_write as *mut f32, &mut octree_collisions as *mut u8)
             };
             for j in &octree_collisions[0..n as usize] {
                 let j = *j as usize;
@@ -171,7 +173,7 @@ impl GameState {
                     continue;
                 }
                 // measure collision vector
-                let normal = self.vehicle_states[i].vehicle.position() - self.vehicle_states[j].vehicle.position();
+                let normal = self.vehicle_states[i].vehicle.position - self.vehicle_states[j].vehicle.position;
                 // measure distance
                 let length = normal.mag();
                 let depth = (bindings::VEHICLE_RADIUS + bindings::VEHICLE_RADIUS) as f32 - length;
@@ -191,12 +193,10 @@ impl GameState {
 
         // attempt to resolve collisions and transfer momentum
         for i in 0..self.vehicle_states.len() {
-            let new_position = self.vehicle_states[i].vehicle.position() + total_translations[i];
-            self.vehicle_states[i].vehicle.set_position(new_position);
+            self.vehicle_states[i].vehicle.position += total_translations[i];
             let velocity = original_velocity[i] / (momentum_neighbors[i].len() as f32);
             for &j in &momentum_neighbors[i] {
-                let new_velocity = self.vehicle_states[j].vehicle.velocity() + velocity;
-                self.vehicle_states[j].vehicle.set_velocity(new_velocity);
+                self.vehicle_states[j].vehicle.velocity += velocity;
             }
         }
         // now, run camera logic
@@ -207,21 +207,12 @@ impl GameState {
         let interp_camera_pos = (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
         let interp_camera_target = (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
         let interp_camera_up = (self.camera.up * interp) + (self.prev_camera.up * (1.0 - interp));
-        
-        let mut interp_camera_pos_write = [0.0f32; 3];
-        interp_camera_pos.write(&mut interp_camera_pos_write as *mut f32);
-        let mut interp_camera_target_write = [0.0f32; 3];
-        interp_camera_target.write(&mut interp_camera_target_write as *mut f32);
-        let mut interp_camera_up_write = [0.0f32; 3];
-        interp_camera_up.write(&mut interp_camera_up_write as *mut f32);
-        
-        unsafe {
-            bindings::set_camera(
-                &mut interp_camera_pos_write as *mut f32,
-                &mut interp_camera_target_write as *mut f32,
-                &mut interp_camera_up_write as *mut f32
-            );
-        }
+
+        RENDERER.lock().unwrap().set_camera(
+            interp_camera_pos,
+            interp_camera_target,
+            interp_camera_up,
+        );
 
         for state in &self.vehicle_states {
             let (pos, rot) = state.interpolate(interp);
@@ -230,7 +221,7 @@ impl GameState {
             pos.write(&mut pos_write as *mut f32);
             rot.write(&mut rot_write as *mut [f32; 3]);
             unsafe {
-                bindings::mesh_render(&(*state.vehicle.type_).mesh as *const bindings::Mesh, &mut pos_write as *mut f32, &mut rot_write as *mut [f32; 3]);
+                bindings::mesh_render(&state.vehicle.ty.mesh as *const bindings::Mesh, &mut pos_write as *mut f32, &mut rot_write as *mut [f32; 3]);
             }
         }
 
@@ -247,10 +238,7 @@ impl GameState {
             if v.dot(&forward) < 0.0 {
                 speed *= -1.0;
             }
-            unsafe {
-                let ptr = std::ffi::CString::new("SPEED %.2f").unwrap();
-                bindings::render_text(6.0, 18.0, 2.0, ptr.as_ptr(), speed as std::ffi::c_double);
-            }
+            render_write!(RENDERER.lock().unwrap(), 6.0, 18.0, 2.0, "SPEED {:.2}", speed);
         }
     }
 }
@@ -279,7 +267,7 @@ pub extern "C" fn game_state_init(spline_asset: *mut bindings::Asset) -> bool {
 
 #[no_mangle]
 pub extern "C" fn game_state_spawn(pos: *const f32, ty: *const bindings::VehicleType, controller: *mut bindings::VehicleController) -> bool {
-    STATE.lock().unwrap().as_mut().unwrap().spawn(Vector::from(pos), ty, controller)
+    STATE.lock().unwrap().as_mut().unwrap().spawn(Vector::from(pos), unsafe { &*ty }, unsafe { &mut *controller })
 }
 
 #[no_mangle]

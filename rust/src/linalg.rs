@@ -335,7 +335,13 @@ pub struct Mtx {
 }
 
 impl Mtx {
-    pub fn new(xx: f32, xy: f32, xz: f32, yx: f32, yy: f32, yz: f32, zx: f32, zy: f32, zz: f32) -> Mtx {
+    pub const IDENT: Self = Self::new(
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+    );
+
+    pub const fn new(xx: f32, xy: f32, xz: f32, yx: f32, yy: f32, yz: f32, zx: f32, zy: f32, zz: f32) -> Mtx {
         Self { xx, xy, xz, yx, yy, yz, zx, zy, zz }
     }
 

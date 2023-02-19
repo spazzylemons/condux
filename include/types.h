@@ -45,12 +45,6 @@ typedef struct {
 } Mesh;
 
 typedef struct {
-    uint8_t ranges;
-    uint8_t points[MAX_GLYPH_ARRAY];
-    uint8_t lines[MAX_GLYPH_ARRAY];
-} Glyph;
-
-typedef struct {
     /** Controls the maximum speed of the vehicle. */
     float speed;
     /** Controls the acceleration rate of the vehicle. */
@@ -67,27 +61,6 @@ typedef struct VehicleController {
     float (*getSteering) (struct VehicleController *self);
     float (*getPedal) (struct VehicleController *self);
 } VehicleController;
-
-typedef struct {
-    /** The vehicle's position in global space. */
-    Vec position;
-    /** The vehicle's rotation in global space. */
-    Quat rotation;
-    /** The vehicle's velocity. */
-    Vec velocity;
-    /** The vehicle's steering, used in rendering. */
-    float steering;
-    /** The type of the vehicle. */
-    const VehicleType *type;
-    /** The vehicle controller. */
-    VehicleController *controller;
-} Vehicle;
-
-typedef struct {
-    uint8_t numVehicles;
-    Vehicle previous[MAX_VEHICLES];
-    Vehicle current[MAX_VEHICLES];
-} VehicleSet;
 
 typedef struct {
     /** The number of control points on the spline. */

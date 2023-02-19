@@ -50,7 +50,6 @@ void game_init(void) {
 
 #ifndef CONDUX_WEB
 void game_deinit(void) {
-    render_deinit();
     platform_deinit();
 }
 #endif
