@@ -9,7 +9,6 @@ extern const Vec gVecYAxis;
 extern const Vec gVecZAxis;
 
 void vec_copy(Vec dst, const Vec src);
-void vec_swap(Vec a, Vec b);
 void vec_set(Vec dst, float x, float y, float z);
 void vec_add(Vec dst, const Vec src);
 void vec_sub(Vec dst, const Vec src);
