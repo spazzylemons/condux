@@ -1,8 +1,56 @@
-use std::mem::zeroed;
-
-use crate::{bindings, linalg::Vector};
+use crate::{linalg::Vector, spline::Spline, vehicle::Vehicle};
 
 const MAX_DEPTH: usize = 3;
+
+struct OctreeListEntry {
+    index: usize,
+    sides: u8,
+}
+
+struct OctreeNode {
+    segments: Vec<OctreeListEntry>,
+    vehicles: Vec<OctreeListEntry>,
+    children: Option<Box<[OctreeNode; 8]>>,
+}
+
+impl OctreeNode {
+    fn reset_vehicles(&mut self) {
+        self.vehicles.clear();
+        if let Some(children) = &mut self.children {
+            for child in children.iter_mut() {
+                child.reset_vehicles();
+            }
+        }
+    }
+}
+
+pub struct Octree {
+    min: Vector,
+    max: Vector,
+
+    root: OctreeNode,
+}
+
+fn select_which<'a>(entries: &'a Vec<OctreeListEntry>, which: &'a [bool; 3]) -> impl Iterator<Item = usize> + 'a {
+    entries.iter().filter(|entry| {
+        (!which[0] || (entry.sides & 1) == 0) &&
+        (which[0] || (entry.sides & 2) == 0) &&
+        (!which[1] || (entry.sides & 4) == 0) &&
+        (which[1] || (entry.sides & 8) == 0) &&
+        (!which[2] || (entry.sides & 16) == 0) &&
+        (which[2] || (entry.sides & 32) == 0)
+    }).map(|entry| entry.index)
+}
+
+fn sides_to_bitmask(which: &[Option<bool>; 3]) -> u8 {
+    let mut sides = 0;
+    for (j, w) in which.iter().enumerate() {
+        if let Some(b) = w {
+            sides |= 1 << ((j << 1) as u8 | u8::from(*b));
+        }
+    }
+    sides
+}
 
 fn check_bounds(v: Vector, min: &mut Vector, max: &mut Vector) {
     min.x = v.x.min(min.x);
@@ -13,15 +61,15 @@ fn check_bounds(v: Vector, min: &mut Vector, max: &mut Vector) {
     max.z = v.z.max(max.z);
 }
 
-fn get_bounds(spline: &bindings::Spline, i: usize) -> (Vector, Vector) {
+fn get_bounds(spline: &Spline, i: usize) -> (Vector, Vector) {
     let mut min = Vector::MAX;
     let mut max = Vector::MIN;
-    for b in [spline.baked[i], spline.baked[(i + 1) % spline.numBaked]] {
+    for b in [&spline.baked[i], &spline.baked[(i + 1) % spline.baked.len()]] {
         let point = Vector::from(b.point);
         let (up, right) = spline.get_up_right(b.offset);
-        let right = right * bindings::SPLINE_TRACK_RADIUS as f32;
-        let above = up * bindings::MAX_GRAVITY_HEIGHT as f32;
-        let below = up * -bindings::COLLISION_DEPTH as f32;
+        let right = right * Spline::TRACK_RADIUS;
+        let above = up * Vehicle::MAX_GRAVITY_HEIGHT;
+        let below = up * -Vehicle::COLLISION_DEPTH;
         check_bounds(above - right + point, &mut min, &mut max);
         check_bounds(above + right + point, &mut min, &mut max);
         check_bounds(below - right + point, &mut min, &mut max);
@@ -30,19 +78,23 @@ fn get_bounds(spline: &bindings::Spline, i: usize) -> (Vector, Vector) {
     (min, max)
 }
 
-fn build_octree(child_pool: &mut [bindings::OctreeNode], depth: usize, w: &mut usize) -> bindings::OctreeNode {
-    let mut result = bindings::OctreeNode {
-        segments: -1,
-        vehicles: -1,
-        children_index: -1,
+fn build_octree(depth: usize) -> OctreeNode {
+    let mut result = OctreeNode {
+        segments: vec![],
+        vehicles: vec![],
+        children: None,
     };
     if depth < MAX_DEPTH {
-        result.children_index = *w as i32;
-        let j = *w;
-        *w += 8;
-        for i in 0..8 {
-            child_pool[i + j] = build_octree(child_pool, depth + 1, w);
-        }
+        result.children = Some(Box::new([
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+            build_octree(depth + 1),
+        ]));
     }
     result
 }
@@ -99,12 +151,29 @@ fn existing_pool_index(which: &[bool; 3]) -> usize {
     usize::from(which[0]) | (usize::from(which[1]) << 1) | (usize::from(which[2]) << 2)
 }
 
-impl bindings::Octree {
-    pub fn new(spline: &bindings::Spline) -> Self {
+impl OctreeNode {
+    fn extract_child(&mut self, which: &[Option<bool>; 3]) -> Option<&mut Self> {
+        Some(&mut self.children.as_mut()?[pool_index(which)?])
+    }
+
+    fn add<F>(&mut self, mut min: Vector, mut max: Vector, segment_min: &Vector, segment_max: &Vector, func: F)
+    where F: FnOnce(&mut Self, u8) {
+        let which = search_octree(segment_min, segment_max, &mut min, &mut max);
+        if let Some(child) = self.extract_child(&which) {
+            child.add(min, max, segment_min, segment_max, func)
+        } else {
+            let bitmask = sides_to_bitmask(&which);
+            func(self, bitmask);
+        }
+    }
+}
+
+impl Octree {
+    pub fn new(spline: &Spline) -> Self {
         // decide bounds
         let mut min = Vector::MAX;
         let mut max = Vector::MIN;
-        for i in 0..spline.numBaked {
+        for i in 0..spline.baked.len() {
             // get bounds of segment
             let (segment_min, segment_max) = get_bounds(spline, i);
             // update bounds
@@ -112,161 +181,87 @@ impl bindings::Octree {
             check_bounds(segment_max, &mut min, &mut max);
         }
         // build structure
-        let mut w = 0;
-        let mut child_pool = [unsafe { zeroed() }; bindings::OCTREE_POOL_SIZE as usize];
-        let mut segment_next = [-1; bindings::MAX_BAKED_POINTS as usize];
-        let mut segment_sides = [0; bindings::MAX_BAKED_POINTS as usize];
-        let mut root = build_octree(&mut child_pool, 0, &mut w);
+        let mut root = build_octree(0);
         // for each segment, figure out where to put it
-        for i in 0..spline.numBaked {
+        for i in 0..spline.baked.len() {
             let (segment_min, segment_max) = get_bounds(spline, i);
-            let mut search_min = min;
-            let mut search_max = max;
-            let mut current = &mut root;
-            let mut which;
-            loop {
-                which = search_octree(&segment_min, &segment_max, &mut search_min, &mut search_max);
-                if current.children_index == -1 {
-                    break;
-                }
-                if let Some(index) = pool_index(&which) {
-                    current = &mut child_pool[current.children_index as usize + index];
-                } else {
-                    break;
-                }
-            }
-            // add to list
-            for (j, w) in which.iter().enumerate() {
-                if let Some(b) = w {
-                    segment_sides[i] |= 1 << ((j << 1) as u8 | u8::from(*b));
-                }
-            }
-            segment_next[i] = current.segments;
-            current.segments = i as i32;
+            root.add(min, max, &segment_min, &segment_max, |node, sides| {
+                node.segments.push(OctreeListEntry {
+                    index: i,
+                    sides,
+                });
+            });
         }
-        let mut min_write = [0.0f32; 3];
-        let mut max_write = [0.0f32; 3];
-        min.write(&mut min_write as *mut f32);
-        max.write(&mut max_write as *mut f32);
         Self {
-            min: min_write,
-            max: max_write,
+            min,
+            max,
 
             root,
-            childPool: child_pool,
-
-            segmentNext: segment_next,
-            segmentSides: segment_sides,
-
-            vehicleNext: [-1; bindings::MAX_VEHICLES as usize],
-            vehicleSides: [0; bindings::MAX_VEHICLES as usize],
         }
     }
 
     pub fn reset_vehicles(&mut self) {
-        self.root.vehicles = -1;
-        for child in self.childPool.iter_mut() {
-            child.vehicles = -1;
-        }
+        self.root.reset_vehicles();
     }
 
     pub fn add_vehicle(&mut self, pos: Vector, index: usize) {
         let vehicle_min = pos - Vector::new(
-            2.0 * bindings::VEHICLE_RADIUS as f32,
-            2.0 * bindings::VEHICLE_RADIUS as f32,
-            2.0 * bindings::VEHICLE_RADIUS as f32,
+            2.0 * Vehicle::RADIUS,
+            2.0 * Vehicle::RADIUS,
+            2.0 * Vehicle::RADIUS,
         );
         let vehicle_max = pos + Vector::new(
-            2.0 * bindings::VEHICLE_RADIUS as f32,
-            2.0 * bindings::VEHICLE_RADIUS as f32,
-            2.0 * bindings::VEHICLE_RADIUS as f32,
+            2.0 * Vehicle::RADIUS,
+            2.0 * Vehicle::RADIUS,
+            2.0 * Vehicle::RADIUS,
         );
-        let mut search_min = Vector::from(self.min);
-        let mut search_max = Vector::from(self.max);
-        let mut current = &mut self.root;
-        let mut which;
-        loop {
-            which = search_octree(&vehicle_min, &vehicle_max, &mut search_min, &mut search_max);
-            if current.children_index == -1 {
-                break;
-            }
-            if let Some(index) = pool_index(&which) {
-                current = &mut self.childPool[current.children_index as usize + index];
-            } else {
-                break;
-            }
-        }
-        // add to list
-        self.vehicleSides[index] = 0;
-        for (j, w) in which.iter().enumerate() {
-            if let Some(b) = w {
-                self.vehicleSides[index] |= 1 << ((j << 1) as u8 | u8::from(*b));
-            }
-        }
-        self.vehicleNext[index] = current.vehicles;
-        current.vehicles = index as i32;
+        self.root.add(self.min, self.max, &vehicle_min, &vehicle_max, |node, sides| {
+            node.vehicles.push(OctreeListEntry { index, sides });
+        });
     }
 
     pub fn find_vehicle_collisions(&self, point: &Vector) -> Vec<usize> {
-        let mut search_min = Vector::from(self.min);
-        let mut search_max = Vector::from(self.max);
+        let mut search_min = self.min;
+        let mut search_max = self.max;
         let mut current = &self.root;
         let mut result = vec![];
         loop {
             let which = search_existing_octree(&point, &mut search_min, &mut search_max);
 
-            let mut index = current.vehicles;
-            while index >= 0 {
-                let i = index as usize;
-                if !(which[0] && (self.vehicleSides[i] & 1) != 0) &&
-                    !(!which[0] && (self.vehicleSides[i] & 2) != 0) &&
-                    !(which[1] && (self.vehicleSides[i] & 4) != 0) &&
-                    !(!which[1] && (self.vehicleSides[i] & 8) != 0) &&
-                    !(which[2] && (self.vehicleSides[i] & 16) != 0) &&
-                    !(!which[2] && (self.vehicleSides[i] & 32) != 0) {
-                    result.push(i);
-                }
-                index = self.vehicleNext[i];
+            for index in select_which(&current.vehicles, &which) {
+                result.push(index);
             }
 
-            if current.children_index == -1 {
+            if let Some(children) = &current.children {
+                current = &children[existing_pool_index(&which)];
+            } else {
                 break result;
             }
-            current = &self.childPool[current.children_index as usize + existing_pool_index(&which)];
         }
     }
 
-    pub fn find_closest_offset(&self, spline: &bindings::Spline, point: Vector) -> f32 {
-        let mut search_min = Vector::from(self.min);
-        let mut search_max = Vector::from(self.max);
+    pub fn find_closest_offset(&self, spline: &Spline, point: Vector) -> f32 {
+        let mut search_min = self.min;
+        let mut search_max = self.max;
         let mut current = &self.root;
         let mut result = 0.0;
         let mut best_dist_sq = f32::INFINITY;
         loop {
             let which = search_existing_octree(&point, &mut search_min, &mut search_max);
 
-            let mut index = current.segments;
-            while index >= 0 {
-                let i = index as usize;
-                if !(which[0] && (self.segmentSides[i] & 1) != 0) &&
-                    !(!which[0] && (self.segmentSides[i] & 2) != 0) &&
-                    !(which[1] && (self.segmentSides[i] & 4) != 0) &&
-                    !(!which[1] && (self.segmentSides[i] & 8) != 0) &&
-                    !(which[2] && (self.segmentSides[i] & 16) != 0) &&
-                    !(!which[2] && (self.segmentSides[i] & 32) != 0) {
-                    let (offset, dist_sq) = spline.get_offset_and_dist_sq(point, i);
-                    if dist_sq < best_dist_sq {
-                        best_dist_sq = dist_sq;
-                        result = offset;
-                    }
+            for index in select_which(&current.segments, &which) {
+                let (offset, dist_sq) = spline.get_offset_and_dist_sq(point, index);
+                if dist_sq < best_dist_sq {
+                    best_dist_sq = dist_sq;
+                    result = offset;
                 }
-                index = self.segmentNext[i];
             }
 
-            if current.children_index == -1 {
+            if let Some(children) = &current.children {
+                current = &children[existing_pool_index(&which)];
+            } else {
                 break result;
             }
-            current = &self.childPool[current.children_index as usize + existing_pool_index(&which)];
         }
     }
 }

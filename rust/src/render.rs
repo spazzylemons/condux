@@ -1,12 +1,19 @@
 use std::{mem::zeroed, ffi::CString, fmt::Write};
 
-use crate::{linalg::{Vector, Mtx}, bindings};
+use crate::{linalg::{Vector, Mtx}, bindings, spline::Spline};
+
+pub struct Mesh {
+    vertices: Vec<Vector>,
+    lines: Vec<(u8, u8)>,
+}
 
 #[derive(Default)]
 struct Glyph {
     points: Vec<(u8, u8)>,
     lines: Vec<(u8, u8)>,
 }
+
+const GLYPH_SPACING: f32 = 5.0;
 
 impl Glyph {
     fn load(asset: &mut bindings::Asset) -> Option<Glyph> {
@@ -112,13 +119,13 @@ impl Renderer {
         }
     }
 
-    pub fn load_spline(&mut self, spline: &bindings::Spline) {
+    pub fn load_spline(&mut self, spline: &Spline) {
         self.spline_points.clear();
         let mut d = 0.0;
         while d < spline.length {
             let p = spline.get_baked(d);
             let (_, r) = spline.get_up_right(d);
-            let r = r * bindings::SPLINE_TRACK_RADIUS as f32;
+            let r = r * Spline::TRACK_RADIUS;
             self.spline_points.push((p - r, p + r));
             d += 1.0;
         }
@@ -167,7 +174,7 @@ impl<'a> Write for RendererWriter<'a> {
                     self.renderer.glyphs[codepoint].render(self.x, self.y, self.scale);
                 }
             }
-            self.x += (bindings::GLYPH_SPACING as f32) * self.scale;
+            self.x += GLYPH_SPACING * self.scale;
         }
         Ok(())
     }
@@ -179,42 +186,34 @@ macro_rules! render_write {
     };
 }
 
-impl bindings::Mesh {
-    pub fn load(asset: &mut bindings::Asset) -> Option<bindings::Mesh> {
-        let mut mesh = unsafe { zeroed::<bindings::Mesh>() };
-        let num_vertices = asset.read_byte()?;
-        mesh.numVertices = num_vertices;
-        let num_vertices = num_vertices as usize;
-        if num_vertices > bindings::MAX_MESH_VERTICES as usize {
-            return None;
+impl Mesh {
+    pub fn load(asset: &mut bindings::Asset) -> Option<Self> {
+        let num_vertices = asset.read_byte()? as usize;
+        let mut vertices = vec![];
+        for _ in 0..num_vertices {
+            vertices.push(asset.read_vector()?);
         }
-        for i in 0..num_vertices {
-            asset.read_vector()?.write(&mut mesh.vertices[i] as *mut f32);
-        }
-        let num_lines = asset.read_byte()?;
-        mesh.numLines = num_lines;
-        let num_lines = num_lines as usize;
-        if num_lines > bindings::MAX_MESH_LINES as usize {
-            return None;
-        }
-        for i in 0..num_lines {
-            mesh.line1[i] = asset.read_byte()?;
-            if mesh.line1[i] >= mesh.numVertices {
+        let num_lines = asset.read_byte()? as usize;
+        let mut lines = vec![];
+        for _ in 0..num_lines {
+            let x = asset.read_byte()?;
+            if x >= num_vertices as u8 {
                 return None;
             }
-            mesh.line2[i] = asset.read_byte()?;
-            if mesh.line2[i] >= mesh.numVertices {
+            let y = asset.read_byte()?;
+            if y >= num_vertices as u8 {
                 return None;
             }
+            lines.push((x, y));
         }
-        Some(mesh)
+        Some(Self { vertices, lines })
     }
 
     pub fn render(&self, renderer: &Renderer, translation: Vector, rotation: Mtx) {
-        for i in 0..self.numLines as usize {
-            let a = Vector::from(self.vertices[self.line1[i] as usize]);
+        for (x, y) in &self.lines {
+            let a = Vector::from(self.vertices[*x as usize]);
             let a = a * rotation + translation;
-            let b = Vector::from(self.vertices[self.line2[i] as usize]);
+            let b = Vector::from(self.vertices[*y as usize]);
             let b = b * rotation + translation;
             renderer.line(a, b);
         }

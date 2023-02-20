@@ -11,8 +11,6 @@
 
 #define MAX_GLYPH_ARRAY 15
 
-#define GLYPH_SPACING 5.0f
-
 #define MAX_POINTS 64
 
 #define MAX_BAKE_DEPTH 5

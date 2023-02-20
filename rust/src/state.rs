@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use crate::{bindings, linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, VehicleController}, render::Renderer};
+use crate::{linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, VehicleController, VehicleType}, render::Renderer, spline::Spline, octree::Octree};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -49,8 +49,8 @@ impl CameraState {
 pub struct GameState<'a> {
     vehicle_states: Vec<VehicleState<'a>>,
 
-    pub spline: bindings::Spline,
-    pub octree: bindings::Octree,
+    pub spline: Spline,
+    pub octree: Octree,
 
     camera: CameraState,
     prev_camera: CameraState,
@@ -67,7 +67,7 @@ fn adjust_normal(up: Vector, normal: Vector) -> Vector {
 }
 
 impl<'a> GameState<'a> {
-    pub fn new(spline: bindings::Spline, octree: bindings::Octree, renderer: Renderer) -> Self {
+    pub fn new(spline: Spline, octree: Octree, renderer: Renderer) -> Self {
         Self {
             vehicle_states: vec![],
             spline,
@@ -78,11 +78,7 @@ impl<'a> GameState<'a> {
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, ty: &'a bindings::VehicleType, controller: &'a dyn VehicleController) -> bool {
-        if self.vehicle_states.len() == bindings::MAX_VEHICLES as usize {
-            return false;
-        }
-    
+    pub fn spawn(&mut self, pos: Vector, ty: &'a VehicleType, controller: &'a dyn VehicleController){
         let vehicle = Vehicle {
             position: pos,
             rotation: Quat::IDENT,
@@ -98,8 +94,6 @@ impl<'a> GameState<'a> {
     
         let vehicle_state = VehicleState { vehicle, prev_pos, prev_rot, prev_steering };
         self.vehicle_states.push(vehicle_state);
-
-        true
     }
 
     fn target_pos(&self, vehicle: &Vehicle) -> Vector {
@@ -173,7 +167,7 @@ impl<'a> GameState<'a> {
                 let normal = self.vehicle_states[i].vehicle.position - self.vehicle_states[j].vehicle.position;
                 // measure distance
                 let length = normal.mag();
-                let depth = (bindings::VEHICLE_RADIUS + bindings::VEHICLE_RADIUS) as f32 - length;
+                let depth = (Vehicle::RADIUS + Vehicle::RADIUS) as f32 - length;
                 if depth <= 0.0 {
                     continue;
                 }

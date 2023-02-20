@@ -1,6 +1,6 @@
 use std::{slice::{from_raw_parts, from_raw_parts_mut}, ops::{Add, Sub, Mul, AddAssign, SubAssign, MulAssign, Div, DivAssign, Neg}};
 
-use crate::bindings;
+use crate::timing::TICK_DELTA;
 
 /// Mixin that provides all length-related methods for both Vector and Quat.
 pub trait Length: Sized + Sub<Self, Output = Self> + DivAssign<f32> {
@@ -44,7 +44,7 @@ macro_rules! auto_assign {
     };
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Vector {
     pub x: f32,
     pub y: f32,
@@ -81,7 +81,7 @@ impl Vector {
     }
 
     pub fn approach(mut self, strength: f32, to: &Self) -> Self {
-        let strength = strength * (bindings::TICK_DELTA as f32);
+        let strength = strength * TICK_DELTA;
         self /= 1.0 + strength;
         self += *to * strength;
         self
