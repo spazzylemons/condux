@@ -1,6 +1,6 @@
 use std::{fmt::Write};
 
-use crate::{linalg::{Vector, Mtx}, bindings, spline::Spline, assets::Asset};
+use crate::{linalg::{Vector, Mtx}, spline::Spline, assets::Asset, platform::Frame};
 
 pub struct Mesh {
     vertices: Vec<Vector>,
@@ -37,7 +37,7 @@ impl Glyph {
         Some(Glyph { points, lines })
     }
 
-    fn render(&self, x: f32, y: f32, scale: f32) {
+    fn render(&self, x: f32, y: f32, scale: f32, frame: &mut Frame) {
         for (i, j) in &self.lines {
             let (x0, y0) = self.points[*i as usize];
             let (x1, y1) = self.points[*j as usize];
@@ -45,9 +45,7 @@ impl Glyph {
             let x1 = x + f32::from(x1) * scale;
             let y0 = y - f32::from(y0) * scale;
             let y1 = y - f32::from(y1) * scale;
-            unsafe {
-                bindings::platform_line(x0, y0, x1, y1);
-            }
+            frame.line(x0, y0, x1, y1);
         }
     }
 }
@@ -85,7 +83,7 @@ impl Renderer {
         }
     }
 
-    pub fn line(&self, a: Vector, b: Vector) {
+    pub fn line(&self, a: Vector, b: Vector, frame: &mut Frame) {
         // perform camera transform
         let a = (a - self.camera_pos) * self.camera_mtx;
         let b = (b - self.camera_pos) * self.camera_mtx;
@@ -104,17 +102,15 @@ impl Renderer {
             a
         };
         // adjust for screen res
-        let width = unsafe { bindings::platform_width() } as f32;
-        let height = unsafe { bindings::platform_height() } as f32;
+        let width = f32::from(frame.platform.width());
+        let height = f32::from(frame.platform.height());
         let scale = width.min(height);
         // draw it
         let x0 = scale * (a.x / a.z) + (width / 2.0);
         let y0 = (height / 2.0) - scale * (a.y / a.z);
         let x1 = scale * (b.x / b.z) + (width / 2.0);
         let y1 = (height / 2.0) - scale * (b.y / b.z);
-        unsafe {
-            bindings::platform_line(x0, y0, x1, y1);
-        }
+        frame.line(x0, y0, x1, y1);
     }
 
     pub fn load_spline(&mut self, spline: &Spline) {
@@ -129,7 +125,7 @@ impl Renderer {
         }
     }
 
-    pub fn render_spline(&self) {
+    pub fn render_spline(&self, frame: &mut Frame) {
         // in case no points loaded, don't draw
         if self.spline_points.len() == 0 {
             return;
@@ -138,38 +134,39 @@ impl Renderer {
         for i in 0..self.spline_points.len() - 1 {
             let (l1, r1) = self.spline_points[i];
             let (l2, r2) = self.spline_points[i + 1];
-            self.line(l1, l2);
-            self.line(r1, r2);
-            self.line(l1, r1);
+            self.line(l1, l2, frame);
+            self.line(r1, r2, frame);
+            self.line(l1, r1, frame);
         }
         // close the loop
         let (l1, r1) = self.spline_points[self.spline_points.len() - 1];
         let (l2, r2) = self.spline_points[0];
-        self.line(l1, l2);
-        self.line(r1, r2);
-        self.line(l1, r1);
+        self.line(l1, l2, frame);
+        self.line(r1, r2, frame);
+        self.line(l1, r1, frame);
     }
 
-    pub fn writer<'a>(&'a self, x: f32, y: f32, scale: f32) -> RendererWriter<'a> {
-        RendererWriter { renderer: self, x, y, scale }
+    pub fn writer<'a, 'b, 'c>(&'a self, x: f32, y: f32, scale: f32, frame: &'b mut Frame<'c>) -> RendererWriter<'a, 'b, 'c> {
+        RendererWriter { renderer: self, x, y, scale, frame }
     }
 }
 
-pub struct RendererWriter<'a> {
+pub struct RendererWriter<'a, 'b, 'c> {
     renderer: &'a Renderer,
     x: f32,
     y: f32,
     scale: f32,
+    frame: &'b mut Frame<'c>,
 }
 
-impl<'a> Write for RendererWriter<'a> {
+impl<'a, 'b, 'c> Write for RendererWriter<'a, 'b, 'c> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         for c in s.chars() {
             let codepoint = u32::from(c);
             if codepoint >= 0x20 {
                 let codepoint = (codepoint - 0x20) as usize;
                 if codepoint < self.renderer.glyphs.len() {
-                    self.renderer.glyphs[codepoint].render(self.x, self.y, self.scale);
+                    self.renderer.glyphs[codepoint].render(self.x, self.y, self.scale, self.frame);
                 }
             }
             self.x += GLYPH_SPACING * self.scale;
@@ -179,8 +176,8 @@ impl<'a> Write for RendererWriter<'a> {
 }
 
 macro_rules! render_write {
-    ($dst:expr, $x:expr, $y:expr, $scale:expr, $($arg:tt)*) => {
-        write!((($dst).writer($x, $y, $scale)), $($arg)*).unwrap()
+    ($dst:expr, $x:expr, $y:expr, $scale:expr, $frame:expr, $($arg:tt)*) => {
+        write!((($dst).writer($x, $y, $scale, $frame)), $($arg)*).unwrap()
     };
 }
 
@@ -207,13 +204,13 @@ impl Mesh {
         Some(Self { vertices, lines })
     }
 
-    pub fn render(&self, renderer: &Renderer, translation: Vector, rotation: Mtx) {
+    pub fn render(&self, renderer: &Renderer, translation: Vector, rotation: Mtx, frame: &mut Frame) {
         for (x, y) in &self.lines {
             let a = Vector::from(self.vertices[*x as usize]);
             let a = a * rotation + translation;
             let b = Vector::from(self.vertices[*y as usize]);
             let b = b * rotation + translation;
-            renderer.line(a, b);
+            renderer.line(a, b, frame);
         }
     }
 }

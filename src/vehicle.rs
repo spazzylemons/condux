@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use crate::{bindings, linalg::{Quat, Mtx, Vector, Length}, spline::Spline, octree::Octree, timing::TICK_DELTA, render::Mesh};
+use crate::{linalg::{Quat, Mtx, Vector, Length}, spline::Spline, octree::Octree, timing::TICK_DELTA, render::Mesh, platform::{Controls, Buttons}};
 
 const GRAVITY_APPROACH_SPEED: f32 = 5.0;
 const GRAVITY_STRENGTH: f32 = 15.0;
@@ -161,15 +161,15 @@ pub trait VehicleController {
 }
 
 pub struct PlayerController<'a> {
-    pub controls: &'a Mutex<bindings::Controls>,
+    pub controls: &'a Mutex<Controls>,
 }
 
 impl<'a> VehicleController for PlayerController<'a> {
     fn pedal(&self) -> f32 {
         let controls = self.controls.lock().unwrap();
-        if (controls.buttons & bindings::BTN_BACK as u8) != 0 {
+        if controls.buttons.contains(Buttons::BACK) {
             -1.0
-        } else if (controls.buttons & bindings::BTN_OK as u8) != 0 {
+        } else if controls.buttons.contains(Buttons::OK) {
             1.0
         } else {
             0.0

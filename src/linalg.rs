@@ -1,4 +1,4 @@
-use std::{slice::{from_raw_parts, from_raw_parts_mut}, ops::{Add, Sub, Mul, AddAssign, SubAssign, MulAssign, Div, DivAssign, Neg}};
+use std::{ops::{Add, Sub, Mul, AddAssign, SubAssign, MulAssign, Div, DivAssign, Neg}};
 
 use crate::timing::TICK_DELTA;
 
@@ -65,13 +65,6 @@ impl Vector {
         Self { x, y, z }
     }
 
-    pub fn write(&self, value: *mut f32) {
-        let slice = unsafe { from_raw_parts_mut(value, 3) };
-        slice[0] = self.x;
-        slice[1] = self.y;
-        slice[2] = self.z;
-    }
-
     pub fn cross(&self, other: &Self) -> Self {
         Self::new(
             self.y * other.z - other.y * self.z,
@@ -97,25 +90,6 @@ impl Vector {
 impl Length for Vector {
     fn dot(&self, other: &Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
-    }
-}
-
-impl From<[f32; 3]> for Vector {
-    fn from(value: [f32; 3]) -> Self {
-        Self::new(value[0], value[1], value[2])
-    }
-}
-
-impl From<Vector> for [f32; 3] {
-    fn from(value: Vector) -> Self {
-        [value.x, value.y, value.z]
-    }
-}
-
-impl From<*const f32> for Vector {
-    fn from(value: *const f32) -> Self {
-        let slice = unsafe { from_raw_parts(value, 3) };
-        Self::new(slice[0], slice[1], slice[2])
     }
 }
 
@@ -196,14 +170,6 @@ impl Quat {
         Self { w, x, y, z }
     }
 
-    pub fn write(&self, value: *mut f32) {
-        let slice = unsafe { from_raw_parts_mut(value, 4) };
-        slice[0] = self.w;
-        slice[1] = self.x;
-        slice[2] = self.y;
-        slice[3] = self.z;
-    }
-
     pub fn axis_angle(axis: &Vector, angle: f32) -> Self {
         let angle = angle * 0.5;
         let s = angle.sin();
@@ -247,25 +213,6 @@ impl Neg for Quat {
         self.y = -self.y;
         self.z = -self.z;
         self
-    }
-}
-
-impl From<[f32; 4]> for Quat {
-    fn from(value: [f32; 4]) -> Self {
-        Self::new(value[0], value[1], value[2], value[3])
-    }
-}
-
-impl From<Quat> for [f32; 4] {
-    fn from(value: Quat) -> Self {
-        [value.w, value.x, value.y, value.z]
-    }
-}
-
-impl From<*const f32> for Quat {
-    fn from(value: *const f32) -> Self {
-        let slice = unsafe { from_raw_parts(value, 4) };
-        Self::new(slice[0], slice[1], slice[2], slice[3])
     }
 }
 
@@ -349,19 +296,6 @@ impl Mtx {
         Self { xx, xy, xz, yx, yy, yz, zx, zy, zz }
     }
 
-    pub fn write(&self, dst: *mut [f32; 3]) {
-        let slice = unsafe { from_raw_parts_mut(dst, 3) };
-        slice[0][0] = self.xx;
-        slice[0][1] = self.xy;
-        slice[0][2] = self.xz;
-        slice[1][0] = self.yx;
-        slice[1][1] = self.yy;
-        slice[1][2] = self.yz;
-        slice[2][0] = self.zx;
-        slice[2][1] = self.zy;
-        slice[2][2] = self.zz;
-    }
-
     pub fn transposed(mut self) -> Self {
         let t = self.yx;
         self.yx = self.xy;
@@ -410,17 +344,6 @@ impl Mtx {
         let yz = a - b;
         let zy = a + b;
         Self::new(xx, xy, xz, yx, yy, yz, zx, zy, zz)
-    }
-}
-
-impl From<*const [f32; 3]> for Mtx {
-    fn from(value: *const [f32; 3]) -> Self {
-        let slice = unsafe { from_raw_parts(value, 3) };
-        Self::new(
-            slice[0][0], slice[0][1], slice[0][2],
-            slice[1][0], slice[1][1], slice[1][2],
-            slice[2][0], slice[2][1], slice[2][2],
-        )
     }
 }
 

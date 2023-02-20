@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use crate::{linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, VehicleController, VehicleType}, render::Renderer, spline::Spline, octree::Octree};
+use crate::{linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, VehicleController, VehicleType}, render::Renderer, spline::Spline, octree::Octree, platform::Frame};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -149,15 +149,11 @@ impl<'a> GameState<'a> {
             state.vehicle.velocity = Vector::ZERO;
             momentum_neighbors.push(vec![i]);
 
-            let mut position_write = [0.0f32; 3];
-            state.vehicle.position.write(&mut position_write as *mut f32);
             self.octree.add_vehicle(state.vehicle.position, i);
         }
 
         // next, find any collisions between vehicles
         for i in 0..self.vehicle_states.len() {
-            let mut position_write = [0.0f32; 3];
-            self.vehicle_states[i].vehicle.position.write(&mut position_write as *mut f32);
             let collisions = self.octree.find_vehicle_collisions(&self.vehicle_states[i].vehicle.position);
             for j in collisions {
                 if j <= i {
@@ -194,7 +190,7 @@ impl<'a> GameState<'a> {
         self.update_camera_pos(focus);
     }
 
-    pub fn render(&mut self, ui_focus: usize, interp: f32) {
+    pub fn render(&mut self, ui_focus: usize, interp: f32, frame: &mut Frame) {
         let interp_camera_pos = (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
         let interp_camera_target = (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
         let interp_camera_up = (self.camera.up * interp) + (self.prev_camera.up * (1.0 - interp));
@@ -207,10 +203,10 @@ impl<'a> GameState<'a> {
 
         for state in &self.vehicle_states {
             let (pos, rot) = state.interpolate(interp);
-            state.vehicle.ty.mesh.render(&self.renderer, pos, rot);
+            state.vehicle.ty.mesh.render(&self.renderer, pos, rot, frame);
         }
 
-        self.renderer.render_spline();
+        self.renderer.render_spline(frame);
 
         if ui_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[ui_focus].vehicle;
@@ -221,7 +217,7 @@ impl<'a> GameState<'a> {
             if v.dot(&forward) < 0.0 {
                 speed *= -1.0;
             }
-            render_write!(self.renderer, 6.0, 18.0, 2.0, "SPEED {:.2}", speed);
+            render_write!(self.renderer, 6.0, 18.0, 2.0, frame, "SPEED {:.2}", speed);
         }
     }
 }
