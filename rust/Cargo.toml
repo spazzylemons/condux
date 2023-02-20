@@ -8,3 +8,6 @@ bindgen = "0.64.0"
 
 [target.armv6k-nintendo-3ds.dependencies]
 ctru-rs = { git = "https://github.com/rust3ds/ctru-rs.git" }
+
+[dependencies]
+include_dir = "0.7.3"

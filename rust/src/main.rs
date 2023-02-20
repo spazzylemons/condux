@@ -11,6 +11,7 @@ pub mod vehicle;
 
 use std::{sync::Mutex, mem::zeroed};
 
+use assets::Asset;
 use render::Mesh;
 
 use crate::{state::GameState, timing::Timer, vehicle::{PlayerController, EmptyController, VehicleType}, render::Renderer, spline::Spline, octree::Octree};
@@ -21,7 +22,7 @@ fn main() {
     }
     let mut renderer = Renderer::new();
     renderer.load_glyphs();
-    let mut asset = bindings::Asset::load("mesh_vehicle.bin").unwrap();
+    let mut asset = Asset::load("mesh_vehicle.bin").unwrap();
     let mesh = Mesh::load(&mut asset).unwrap();
     let test_type = VehicleType {
         speed: 15.0,
@@ -30,7 +31,7 @@ fn main() {
         anti_drift: 12.0,
         mesh,
     };
-    asset = bindings::Asset::load("course_test1.bin").unwrap();
+    asset = Asset::load("course_test1.bin").unwrap();
     let spline = Spline::load(&mut asset).unwrap();
     let octree = Octree::new(&spline);
     let mut state = GameState::new(spline, octree, renderer);

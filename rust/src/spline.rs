@@ -1,6 +1,6 @@
 use std::f32::consts::{TAU, PI};
 
-use crate::{bindings, linalg::{Vector, Length, Mtx}, octree::Octree};
+use crate::{linalg::{Vector, Length, Mtx}, octree::Octree, assets::Asset};
 
 const BAKE_LENGTH_SQ: f32 = 1.0;
 
@@ -36,7 +36,7 @@ impl Spline {
 
     const MAX_BAKE_DEPTH: usize = 5;
 
-    pub fn load(asset: &mut bindings::Asset) -> Option<Self> {
+    pub fn load(asset: &mut Asset) -> Option<Self> {
         // number of points
         let num_points = asset.read_byte()? as usize;
         if num_points < 3 {

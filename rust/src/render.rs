@@ -1,6 +1,6 @@
-use std::{mem::zeroed, ffi::CString, fmt::Write};
+use std::{fmt::Write};
 
-use crate::{linalg::{Vector, Mtx}, bindings, spline::Spline};
+use crate::{linalg::{Vector, Mtx}, bindings, spline::Spline, assets::Asset};
 
 pub struct Mesh {
     vertices: Vec<Vector>,
@@ -16,7 +16,7 @@ struct Glyph {
 const GLYPH_SPACING: f32 = 5.0;
 
 impl Glyph {
-    fn load(asset: &mut bindings::Asset) -> Option<Glyph> {
+    fn load(asset: &mut Asset) -> Option<Glyph> {
         let ranges = asset.read_byte()?;
         let num_points = (ranges & 15) as usize;
         let num_lines = (ranges >> 4) as usize;
@@ -78,9 +78,7 @@ impl Renderer {
 
     pub fn load_glyphs(&mut self) {
         self.glyphs.clear();
-        let mut asset = unsafe { zeroed::<bindings::Asset>() };
-        let asset_name = CString::new("font.bin").unwrap();
-        if unsafe { bindings::asset_load(&mut asset as *mut bindings::Asset, asset_name.as_ptr()) } {
+        if let Some(mut asset) = Asset::load("font.bin") {
             for _ in 0..95 {
                 self.glyphs.push(Glyph::load(&mut asset).unwrap_or_default());
             }
@@ -187,7 +185,7 @@ macro_rules! render_write {
 }
 
 impl Mesh {
-    pub fn load(asset: &mut bindings::Asset) -> Option<Self> {
+    pub fn load(asset: &mut Asset) -> Option<Self> {
         let num_vertices = asset.read_byte()? as usize;
         let mut vertices = vec![];
         for _ in 0..num_vertices {
