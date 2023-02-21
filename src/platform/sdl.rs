@@ -59,7 +59,7 @@ fn get_keycode_bitmask(keycode: sdl2::keyboard::Keycode) -> Buttons {
 }
 
 impl SdlPlatform {
-    fn point(&self, x: f32, y: f32)  {
+    fn point(&self, x: f32, y: f32) {
         // convert to [-1, 1]
         let width = f32::from(self.width());
         let height = f32::from(self.height());

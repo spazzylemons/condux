@@ -20,6 +20,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Controls {
     pub buttons: Buttons,
     pub steering: f32,

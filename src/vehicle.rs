@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::cell::Cell;
 
 use crate::{linalg::{Quat, Mtx, Vector, Length}, spline::Spline, octree::Octree, timing::TICK_DELTA, render::Mesh, platform::{Controls, Buttons}};
 
@@ -165,12 +165,12 @@ pub trait Controller {
 }
 
 pub struct PlayerController<'a> {
-    pub controls: &'a Mutex<Controls>,
+    pub controls: &'a Cell<Controls>,
 }
 
 impl<'a> Controller for PlayerController<'a> {
     fn pedal(&self) -> f32 {
-        let controls = self.controls.lock().unwrap();
+        let controls = self.controls.get();
         if controls.buttons.contains(Buttons::BACK) {
             -1.0
         } else if controls.buttons.contains(Buttons::OK) {
@@ -181,7 +181,7 @@ impl<'a> Controller for PlayerController<'a> {
     }
 
     fn steering(&self) -> f32 {
-        self.controls.lock().unwrap().steering
+        self.controls.get().steering
     }
 }
 

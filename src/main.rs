@@ -11,7 +11,7 @@ pub mod state;
 pub mod timing;
 pub mod vehicle;
 
-use std::sync::Mutex;
+use std::cell::Cell;
 
 use assets::Asset;
 use platform::{Platform, Controls, Buttons};
@@ -39,7 +39,7 @@ fn main() {
     let octree = Octree::new(&spline);
     let mut state = GameState::new(spline, octree, renderer);
     state.renderer.load_spline(&state.spline);
-    let controls = Mutex::new(Controls {
+    let controls = Cell::new(Controls {
         buttons: Buttons::empty(),
         steering: 0.0,
     });
@@ -61,7 +61,7 @@ fn main() {
         if new_controls.steering.abs() < DEADZONE {
             new_controls.steering = 0.0;
         }
-        *controls.lock().unwrap() = new_controls;
+        controls.set(new_controls);
         let (mut i, interp) = timer.frame_ticks(&platform);
         while i > 0 {
             i -= 1;
@@ -70,7 +70,7 @@ fn main() {
         let mut frame = platform.start_frame();
         state.render(0, interp, &mut frame);
         frame.finish();
-        if controls.lock().unwrap().buttons.contains(Buttons::PAUSE) {
+        if controls.get().buttons.contains(Buttons::PAUSE) {
             break;
         }
     }
