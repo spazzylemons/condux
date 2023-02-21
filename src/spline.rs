@@ -6,7 +6,7 @@ const BAKE_LENGTH_SQ: f32 = 1.0;
 
 const FORWARD_VECTOR_SIZE: f32 = 0.125;
 
-struct SplinePoint {
+struct Point {
     point: Vector,
     control: Vector,
     control_mid: f32,
@@ -14,7 +14,7 @@ struct SplinePoint {
     tilt_offset: f32,
 }
 
-pub struct SplineBaked {
+pub struct Baked {
     pub point: Vector,
     position: f32,
     pub offset: f32,
@@ -22,9 +22,9 @@ pub struct SplineBaked {
 
 pub struct Spline {
     /// The control points.
-    points: Vec<SplinePoint>,
+    points: Vec<Point>,
     /// The baked points.
-    pub baked: Vec<SplineBaked>,
+    pub baked: Vec<Baked>,
     /// The total tilt, used for interpolation.
     total_tilt: f32,
     /// The approximate length of the spline.
@@ -38,7 +38,7 @@ impl Spline {
 
     pub fn load(asset: &mut Asset) -> Option<Self> {
         // number of points
-        let num_points = asset.read_byte()? as usize;
+        let num_points = asset.read_byte()?;
         if num_points < 3 {
             return None;
         }
@@ -47,7 +47,7 @@ impl Spline {
         for _ in 0..num_points {
             let point = asset.read_vector()?;
             let tilt = (f32::from(asset.read_byte()?) / 256.0) * TAU;
-            points.push(SplinePoint {
+            points.push(Point {
                 point,
                 control: Vector::default(),
                 control_mid: 0.0,
@@ -58,8 +58,8 @@ impl Spline {
         // fix tilts
         let mut total_tilt = points[0].tilt;
         for i in 0..num_points {
-            let delta = (points[(i + 1) % num_points].tilt - points[i].tilt).rem_euclid(TAU);
-            points[i].tilt = total_tilt;
+            let delta = (points[usize::from((i + 1) % num_points)].tilt - points[usize::from(i)].tilt).rem_euclid(TAU);
+            points[usize::from(i)].tilt = total_tilt;
             if delta <= PI {
                 // move up
                 total_tilt += delta;
@@ -69,9 +69,10 @@ impl Spline {
             }
         }
         // generate bezier control points
-        for a in 0..num_points {
-            let b = (a + 1) % num_points;
-            let c = (a + 2) % num_points;
+        for i in 0..num_points {
+            let a = usize::from(i);
+            let b = usize::from((i + 1) % num_points);
+            let c = usize::from((i + 2) % num_points);
             let pa = points[a].point;
             let pb = points[b].point;
             let pc = points[c].point;
@@ -94,9 +95,9 @@ impl Spline {
         // for each point, recursively find points to bake
         for i in 0..num_points {
             // bake at control point
-            spline.add_baked(i as f32);
+            spline.add_baked(f32::from(i));
             // add length to tilt offsets
-            spline.points[i].tilt_offset = spline.length;
+            spline.points[usize::from(i)].tilt_offset = spline.length;
             // bake in between
             spline.bake_recursive(i, 0.0, 1.0, 0);
         }
@@ -106,6 +107,14 @@ impl Spline {
         Some(spline)
     }
 
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    fn num_points(&self) -> u8 {
+        // the number of points is always known to be within u8 range
+        self.points.len() as u8
+    }
+
+    #[must_use]
     pub fn bezier(&self, index: usize, offset: f32) -> Vector {
         let other_index = (index + 2) % self.points.len();
         let fac_a = (1.0 - offset) * (1.0 - offset);
@@ -117,10 +126,11 @@ impl Spline {
         pa * fac_a + pb * fac_b + pc * fac_c
     }
 
+    #[must_use]
     pub fn interpolate(&self, offset: f32) -> Vector {
-        let offset = offset.rem_euclid(self.points.len() as f32);
-        let index = offset.floor() as usize;
-        let offset = offset - index as f32;
+        let offset = offset.rem_euclid(f32::from(self.num_points()));
+        let index = offset as usize;
+        let offset = offset - offset.floor();
         let prev_index = (index + self.points.len() - 1) % self.points.len();
         let prev_mid = self.points[prev_index].control_mid;
         let next_mid = self.points[index].control_mid;
@@ -130,29 +140,29 @@ impl Spline {
     }
 
     pub fn add_baked(&mut self, position: f32) {
-        let baked = SplineBaked {
+        let baked = Baked {
             point: self.interpolate(position),
             position,
             offset: 0.0,
         };
-        if self.baked.len() != 0 {
+        if !self.baked.is_empty() {
             self.length += baked.point.dist(self.baked[self.baked.len() - 1].point);
         }
-        self.baked.push(SplineBaked { offset: self.length, ..baked });
+        self.baked.push(Baked { offset: self.length, ..baked });
     }
 
-    pub fn bake_recursive(&mut self, index: usize, begin: f32, end: f32, depth: usize) {
-        if depth >= Self::MAX_BAKE_DEPTH as usize {
+    pub fn bake_recursive(&mut self, index: u8, begin: f32, end: f32, depth: usize) {
+        if depth >= Self::MAX_BAKE_DEPTH {
             return;
         }
 
-        let v1 = self.interpolate(index as f32 + begin);
-        let v2 = self.interpolate(index as f32 + end);
+        let v1 = self.interpolate(f32::from(index) + begin);
+        let v2 = self.interpolate(f32::from(index) + end);
 
         if v1.dist_sq(v2) > BAKE_LENGTH_SQ {
             let mid = (begin + end) * 0.5;
             self.bake_recursive(index, begin, mid, depth + 1);
-            self.add_baked(index as f32 + mid);
+            self.add_baked(f32::from(index) + mid);
             self.bake_recursive(index, mid, end, depth + 1);
         }
     }
@@ -178,18 +188,20 @@ impl Spline {
         let mut position_end = self.baked[next_index].position;
         if next_index == 0 {
             offset_end += self.length;
-            position_end += self.points.len() as f32;
+            position_end += f32::from(self.num_points());
         }
         let interp = (baked_offset - offset_begin) / (offset_end - offset_begin);
         (1.0 - interp) * position_begin + interp * position_end
     }
 
+    #[must_use]
     pub fn get_baked(&self, offset: f32) -> Vector {
         self.interpolate(self.convert_baked_offset(offset))
     }
 
-    fn floor_div(&self, i: isize) -> (isize, &SplinePoint) {
-        let n = self.points.len() as isize;
+    #[must_use]
+    fn floor_div(&self, i: isize) -> (isize, &Point) {
+        let n = isize::from(self.num_points());
         let d = i / n;
         let d = if i < 0 && d * i != n {
             d - 1
@@ -225,13 +237,14 @@ impl Spline {
     fn get_tilt(&self, offset: f32) -> f32 {
         let pre_baked = offset.rem_euclid(self.length);
         let offset = self.convert_baked_offset(offset);
-        let index = offset.floor() as isize;
+        let index = offset as isize;
         let a = self.lagrange(index - 1, pre_baked);
         let b = self.lagrange(index, pre_baked);
-        let offset = offset - index as f32;
+        let offset = offset - offset.floor();
         a * (1.0 - offset) + b * offset
     }
 
+    #[must_use]
     pub fn get_up_right(&self, offset: f32) -> (Vector, Vector) {
         let sa = (offset - FORWARD_VECTOR_SIZE).rem_euclid(self.length);
         let sb = (offset + FORWARD_VECTOR_SIZE).rem_euclid(self.length);
@@ -243,6 +256,7 @@ impl Spline {
         (up, right)
     }
 
+    #[must_use]
     pub fn get_up_height(&self, octree: &Octree, pos: Vector) -> Option<(Vector, f32)> {
         let offset = octree.find_closest_offset(self, pos);
         let point = self.get_baked(offset);
@@ -255,6 +269,7 @@ impl Spline {
         }
     }
 
+    #[must_use]
     pub fn get_offset_and_dist_sq(&self, point: Vector, index: usize) -> (f32, f32) {
         let next_index = (index + 1) % self.baked.len();
         let offset = self.baked[index].offset;

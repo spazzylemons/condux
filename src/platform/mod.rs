@@ -1,9 +1,10 @@
-use std::error::Error;
-
 use bitflags::bitflags;
 
+pub type Point = (f32, f32);
+pub type Line = (Point, Point);
+
 pub struct Frame<'a> {
-    lines: Vec<((f32, f32), (f32, f32))>,
+    lines: Vec<Line>,
     pub platform: &'a mut dyn Platform,
 }
 
@@ -35,21 +36,20 @@ impl<'a> Frame<'a> {
 }
 
 pub trait Platform {
-    fn init(preferred_width: u16, preferred_height: u16) -> Result<Self, Box<dyn Error>>
-    where Self: Sized;
+    fn init(preferred_width: u16, preferred_height: u16) -> Self where Self: Sized;
 
     fn should_run(&self) -> bool;
 
     fn time_msec(&self) -> u64;
 
-    fn start_frame<'a>(&'a mut self) -> Frame<'a> where Self: Sized {
+    fn start_frame(&mut self) -> Frame<'_> where Self: Sized {
         Frame {
             lines: vec![],
             platform: self,
         }
     }
 
-    fn end_frame<'a>(&mut self, lines: &[((f32, f32), (f32, f32))]);
+    fn end_frame(&mut self, lines: &[Line]);
 
     fn width(&self) -> u16;
 
@@ -64,6 +64,6 @@ pub mod ctr;
 pub mod sdl;
 
 #[cfg(target_os = "horizon")]
-pub type PlatformImpl = ctr::CitroPlatform;
+pub type Impl = ctr::CitroPlatform;
 #[cfg(not(target_os = "horizon"))]
-pub type PlatformImpl = sdl::SdlPlatform;
+pub type Impl = sdl::SdlPlatform;

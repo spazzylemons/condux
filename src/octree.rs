@@ -31,8 +31,8 @@ pub struct Octree {
     root: OctreeNode,
 }
 
-fn select_which<'a>(entries: &'a Vec<OctreeListEntry>, which: &'a [bool; 3]) -> impl Iterator<Item = usize> + 'a {
-    entries.iter().filter(|entry| {
+fn select_which(entries: &[OctreeListEntry], which: [bool; 3]) -> impl Iterator<Item = usize> + '_ {
+    entries.iter().filter(move |entry| {
         (!which[0] || (entry.sides & 1) == 0) &&
         (which[0] || (entry.sides & 2) == 0) &&
         (!which[1] || (entry.sides & 4) == 0) &&
@@ -42,7 +42,7 @@ fn select_which<'a>(entries: &'a Vec<OctreeListEntry>, which: &'a [bool; 3]) -> 
     }).map(|entry| entry.index)
 }
 
-fn sides_to_bitmask(which: &[Option<bool>; 3]) -> u8 {
+fn sides_to_bitmask(which: [Option<bool>; 3]) -> u8 {
     let mut sides = 0;
     for (j, w) in which.iter().enumerate() {
         if let Some(b) = w {
@@ -65,15 +65,14 @@ fn get_bounds(spline: &Spline, i: usize) -> (Vector, Vector) {
     let mut min = Vector::MAX;
     let mut max = Vector::MIN;
     for b in [&spline.baked[i], &spline.baked[(i + 1) % spline.baked.len()]] {
-        let point = Vector::from(b.point);
         let (up, right) = spline.get_up_right(b.offset);
         let right = right * Spline::TRACK_RADIUS;
         let above = up * Vehicle::MAX_GRAVITY_HEIGHT;
         let below = up * -Vehicle::COLLISION_DEPTH;
-        check_bounds(above - right + point, &mut min, &mut max);
-        check_bounds(above + right + point, &mut min, &mut max);
-        check_bounds(below - right + point, &mut min, &mut max);
-        check_bounds(below + right + point, &mut min, &mut max);
+        check_bounds(above - right + b.point, &mut min, &mut max);
+        check_bounds(above + right + b.point, &mut min, &mut max);
+        check_bounds(below - right + b.point, &mut min, &mut max);
+        check_bounds(below + right + b.point, &mut min, &mut max);
     }
     (min, max)
 }
@@ -143,32 +142,33 @@ fn search_existing_octree(point: &Vector, min: &mut Vector, max: &mut Vector) ->
     ]
 }
 
-fn pool_index(which: &[Option<bool>; 3]) -> Option<usize> {
+fn pool_index(which: [Option<bool>; 3]) -> Option<usize> {
     Some(usize::from(which[0]?) | (usize::from(which[1]?) << 1) | (usize::from(which[2]?) << 2))
 }
 
-fn existing_pool_index(which: &[bool; 3]) -> usize {
+fn existing_pool_index(which: [bool; 3]) -> usize {
     usize::from(which[0]) | (usize::from(which[1]) << 1) | (usize::from(which[2]) << 2)
 }
 
 impl OctreeNode {
-    fn extract_child(&mut self, which: &[Option<bool>; 3]) -> Option<&mut Self> {
+    fn extract_child(&mut self, which: [Option<bool>; 3]) -> Option<&mut Self> {
         Some(&mut self.children.as_mut()?[pool_index(which)?])
     }
 
     fn add<F>(&mut self, mut min: Vector, mut max: Vector, segment_min: &Vector, segment_max: &Vector, func: F)
     where F: FnOnce(&mut Self, u8) {
         let which = search_octree(segment_min, segment_max, &mut min, &mut max);
-        if let Some(child) = self.extract_child(&which) {
-            child.add(min, max, segment_min, segment_max, func)
+        if let Some(child) = self.extract_child(which) {
+            child.add(min, max, segment_min, segment_max, func);
         } else {
-            let bitmask = sides_to_bitmask(&which);
+            let bitmask = sides_to_bitmask(which);
             func(self, bitmask);
         }
     }
 }
 
 impl Octree {
+    #[must_use]
     pub fn new(spline: &Spline) -> Self {
         // decide bounds
         let mut min = Vector::MAX;
@@ -220,26 +220,28 @@ impl Octree {
         });
     }
 
+    #[must_use]
     pub fn find_vehicle_collisions(&self, point: &Vector) -> Vec<usize> {
         let mut search_min = self.min;
         let mut search_max = self.max;
         let mut current = &self.root;
         let mut result = vec![];
         loop {
-            let which = search_existing_octree(&point, &mut search_min, &mut search_max);
+            let which = search_existing_octree(point, &mut search_min, &mut search_max);
 
-            for index in select_which(&current.vehicles, &which) {
+            for index in select_which(&current.vehicles, which) {
                 result.push(index);
             }
 
             if let Some(children) = &current.children {
-                current = &children[existing_pool_index(&which)];
+                current = &children[existing_pool_index(which)];
             } else {
                 break result;
             }
         }
     }
 
+    #[must_use]
     pub fn find_closest_offset(&self, spline: &Spline, point: Vector) -> f32 {
         let mut search_min = self.min;
         let mut search_max = self.max;
@@ -249,7 +251,7 @@ impl Octree {
         loop {
             let which = search_existing_octree(&point, &mut search_min, &mut search_max);
 
-            for index in select_which(&current.segments, &which) {
+            for index in select_which(&current.segments, which) {
                 let (offset, dist_sq) = spline.get_offset_and_dist_sq(point, index);
                 if dist_sq < best_dist_sq {
                     best_dist_sq = dist_sq;
@@ -258,7 +260,7 @@ impl Octree {
             }
 
             if let Some(children) = &current.children {
-                current = &children[existing_pool_index(&which)];
+                current = &children[existing_pool_index(which)];
             } else {
                 break result;
             }

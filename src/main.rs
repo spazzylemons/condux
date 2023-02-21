@@ -19,15 +19,15 @@ use render::Mesh;
 
 const DEADZONE: f32 = 0.03;
 
-use crate::{state::GameState, timing::Timer, vehicle::{PlayerController, EmptyController, VehicleType}, render::Renderer, spline::Spline, octree::Octree};
+use crate::{state::GameState, timing::Timer, vehicle::{PlayerController, EmptyController, Model}, render::Renderer, spline::Spline, octree::Octree};
 
 fn main() {
-    let mut platform = platform::PlatformImpl::init(640, 480).unwrap();
+    let mut platform = platform::Impl::init(640, 480);
     let mut renderer = Renderer::new();
     renderer.load_glyphs();
     let mut asset = Asset::load("mesh_vehicle.bin").unwrap();
     let mesh = Mesh::load(&mut asset).unwrap();
-    let test_type = VehicleType {
+    let test_type = Model {
         speed: 15.0,
         acceleration: 7.0,
         handling: 1.5,

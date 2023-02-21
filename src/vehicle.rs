@@ -8,7 +8,7 @@ const FRICTION_COEFFICIENT: f32 = 0.1;
 const GRAVITY_FALLOFF_POINT: f32 = 2.0;
 const STEERING_APPROACH_SPEED: f32 = 6.0;
 
-pub struct VehicleType {
+pub struct Model {
     pub speed: f32,
     pub acceleration: f32,
     pub handling: f32,
@@ -21,8 +21,8 @@ pub struct Vehicle<'a> {
     pub rotation: Quat,
     pub velocity: Vector,
     pub steering: f32,
-    pub ty: &'a VehicleType,
-    pub controller: &'a dyn VehicleController,
+    pub ty: &'a Model,
+    pub controller: &'a dyn Controller,
 }
 
 impl<'a> Vehicle<'a> {
@@ -32,20 +32,24 @@ impl<'a> Vehicle<'a> {
 
     pub const COLLISION_DEPTH: f32 = 0.25;
 
+    #[must_use]
     pub fn up_vector(&self) -> Vector {
         Mtx::from(self.rotation) * Vector::Y_AXIS
     }
 
+    #[must_use]
     pub fn forward_vector(&self) -> Vector {
         Mtx::from(self.rotation) * Vector::Z_AXIS
     }
 
+    #[must_use]
     pub fn gravity(&self) -> Vector {
         let up = self.up_vector();
         // amount of gravity being experienced
         up * self.velocity.dot(&up)
     }
 
+    #[must_use]
     pub fn velocity_without_gravity(&self) -> Vector {
         self.velocity - self.gravity()
     }
@@ -155,7 +159,7 @@ impl<'a> Vehicle<'a> {
     }
 }
 
-pub trait VehicleController {
+pub trait Controller {
     fn pedal(&self) -> f32;
     fn steering(&self) -> f32;
 }
@@ -164,7 +168,7 @@ pub struct PlayerController<'a> {
     pub controls: &'a Mutex<Controls>,
 }
 
-impl<'a> VehicleController for PlayerController<'a> {
+impl<'a> Controller for PlayerController<'a> {
     fn pedal(&self) -> f32 {
         let controls = self.controls.lock().unwrap();
         if controls.buttons.contains(Buttons::BACK) {
@@ -183,7 +187,7 @@ impl<'a> VehicleController for PlayerController<'a> {
 
 pub struct EmptyController;
 
-impl VehicleController for EmptyController {
+impl Controller for EmptyController {
     fn pedal(&self) -> f32 {
         0.0
     }

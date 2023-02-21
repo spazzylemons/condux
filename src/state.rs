@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use crate::{linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, VehicleController, VehicleType}, render::Renderer, spline::Spline, octree::Octree, platform::Frame};
+use crate::{linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, Controller, Model}, render::Renderer, spline::Spline, octree::Octree, platform::Frame};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -12,6 +12,11 @@ struct VehicleState<'a> {
     prev_pos: Vector,
     prev_rot: Quat,
     prev_steering: f32,
+}
+
+fn target_pos(vehicle: &Vehicle) -> Vector {
+    let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
+    vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
 }
 
 impl<'a> VehicleState<'a> {
@@ -60,13 +65,14 @@ pub struct GameState<'a> {
 
 // (0, sin(PI / -8), cos(PI / -8))
 // trigonometry is not const fn in Rust
-const TARGET_ANGLE: Vector = Vector::new(0.0, -0.3826834323650898, 0.9238795325112867);
+const TARGET_ANGLE: Vector = Vector::new(0.0, -0.382_683_43, 0.923_879_5);
 
 fn adjust_normal(up: Vector, normal: Vector) -> Vector {
     (normal - up * normal.dot(&up)).normalized()
 }
 
 impl<'a> GameState<'a> {
+    #[must_use]
     pub fn new(spline: Spline, octree: Octree, renderer: Renderer) -> Self {
         Self {
             vehicle_states: vec![],
@@ -78,7 +84,7 @@ impl<'a> GameState<'a> {
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, ty: &'a VehicleType, controller: &'a dyn VehicleController){
+    pub fn spawn(&mut self, pos: Vector, ty: &'a Model, controller: &'a dyn Controller){
         let vehicle = Vehicle {
             position: pos,
             rotation: Quat::IDENT,
@@ -96,11 +102,6 @@ impl<'a> GameState<'a> {
         self.vehicle_states.push(vehicle_state);
     }
 
-    fn target_pos(&self, vehicle: &Vehicle) -> Vector {
-        let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
-        vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
-    }
-
     fn update_camera_pos(&mut self, focus: usize) {
         if focus >= self.vehicle_states.len() {
             return;
@@ -115,7 +116,7 @@ impl<'a> GameState<'a> {
         let translation_global = camera_mtx * tmp;
         self.camera.pos += translation_global;
         // approach target location
-        let target = self.target_pos(&self.vehicle_states[focus].vehicle);
+        let target = target_pos(&self.vehicle_states[focus].vehicle);
         self.camera.pos = self.camera.pos.approach(CAMERA_APPROACH_SPEED, &target);
         self.camera.look_at(&self.vehicle_states[focus].vehicle);
     }
@@ -126,7 +127,7 @@ impl<'a> GameState<'a> {
         }
 
         let vehicle = &self.vehicle_states[focus].vehicle;
-        self.camera.pos = self.target_pos(vehicle);
+        self.camera.pos = target_pos(vehicle);
         self.camera.look_at(vehicle);
     }
 
@@ -163,7 +164,7 @@ impl<'a> GameState<'a> {
                 let normal = self.vehicle_states[i].vehicle.position - self.vehicle_states[j].vehicle.position;
                 // measure distance
                 let length = normal.mag();
-                let depth = (Vehicle::RADIUS + Vehicle::RADIUS) as f32 - length;
+                let depth = (Vehicle::RADIUS + Vehicle::RADIUS) - length;
                 if depth <= 0.0 {
                     continue;
                 }

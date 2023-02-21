@@ -1,8 +1,6 @@
-use ctru::{gfx::{RawFrameBuffer, Screen}, prelude::*};
+use ctru::prelude::*;
 
-use std::error::Error;
-
-use super::{Buttons, Controls, Platform};
+use super::{Buttons, Controls, Platform, Line};
 
 static KEY_MAPPING: [ctru::services::hid::KeyPad; 7] = [
     ctru::services::hid::KeyPad::KEY_UP,
@@ -59,7 +57,7 @@ struct Point {
 
 pub struct CitroPlatform {
     hid: Hid,
-    gfx: Gfx,
+    _gfx: Gfx,
     apt: Apt,
     target: *mut citro3d_sys::C3D_RenderTarget,
 }
@@ -76,12 +74,12 @@ impl Drop for CitroPlatform {
 }
 
 impl Platform for CitroPlatform {
-    fn init(_preferred_width: u16, _preferred_height: u16) -> Result<Self, Box<dyn Error>> {
+    fn init(_preferred_width: u16, _preferred_height: u16) -> Self {
         ctru::use_panic_handler();
 
-        let hid = Hid::init()?;
-        let gfx = Gfx::init()?;
-        let apt = Apt::init()?;
+        let hid = Hid::init().unwrap();
+        let gfx = Gfx::init().unwrap();
+        let apt = Apt::init().unwrap();
 
         let target = unsafe {
             // initialize citro3d
@@ -94,12 +92,12 @@ impl Platform for CitroPlatform {
             citro2d_sys::C2D_CreateScreenTarget(ctru_sys::GFX_TOP, ctru_sys::GFX_LEFT)
         };
 
-        Ok(Self {
+        Self {
             hid,
-            gfx,
+            _gfx: gfx,
             apt,
             target,
-        })
+        }
     }
 
     fn should_run(&self) -> bool {
@@ -112,13 +110,17 @@ impl Platform for CitroPlatform {
         }
     }
 
-    fn end_frame(&mut self, lines: &[((f32, f32), (f32, f32))]) {
+    fn end_frame(&mut self, lines: &[Line]) {
         unsafe {
             citro3d_sys::C3D_FrameBegin(citro3d_sys::C3D_FRAME_SYNCDRAW as u8);
             citro2d_sys::C2D_TargetClear(self.target, 0xff_00_00_00);
             citro2d_sys::C2D_SceneBegin(self.target);
             for ((x0, y0), (x1, y1)) in lines {
-                citro2d_sys::C2D_DrawLine(*x0, *y0, 0xffffffff, *x1, *y1, 0xffffffff, 1.0, 0.0);
+                citro2d_sys::C2D_DrawLine(
+                    *x0, *y0, 0xff_ff_ff_ff,
+                    *x1, *y1, 0xff_ff_ff_ff,
+                    1.0, 0.0,
+                );
             }
             citro3d_sys::C3D_FrameEnd(0);
         }

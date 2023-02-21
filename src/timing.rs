@@ -21,7 +21,7 @@ impl Timer {
     fn tick_ms(&self) -> u64 {
         self.start_ms
             + (1000 * self.num_seconds)
-            + (1000 * u64::from(self.tick_in_second)) / (TICKS_PER_SECOND as u64)
+            + (1000 * u64::from(self.tick_in_second)) / u64::from(TICKS_PER_SECOND)
     }
 
     /// Return the number of ticks to run for this frame, as well as interpolation
@@ -37,7 +37,7 @@ impl Timer {
             ticks += 1;
         }
         let interp = (1.0 - (((self.tick_ms() - millis) as f32)
-            * ((TICKS_PER_SECOND as f32) / 1000.0))).clamp(0.0, 1.0);
+            * (f32::from(TICKS_PER_SECOND) / 1000.0))).clamp(0.0, 1.0);
         (ticks, interp)
     }
 }

@@ -1,9 +1,12 @@
 use sdl2::event::Event;
 
-use std::{time::Instant, error::Error};
+use std::time::Instant;
 
-use super::{Platform, Controls, Buttons};
+use super::{Platform, Controls, Buttons, Line};
 
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::style)]
+#[allow(clippy::pedantic)]
 mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
@@ -69,25 +72,26 @@ impl SdlPlatform {
 }
 
 impl Platform for SdlPlatform {
-    fn init(preferred_width: u16, preferred_height: u16) -> Result<Self, Box<dyn Error>> {
-        let ctx = sdl2::init()?;
-        let video = ctx.video()?;
+    fn init(preferred_width: u16, preferred_height: u16) -> Self {
+        let ctx = sdl2::init().unwrap();
+        let video = ctx.video().unwrap();
         let window = video.window("window", preferred_width.into(), preferred_height.into())
             .position_centered()
             .opengl()
-            .build()?;
-        gl::load_with(|s| video.gl_get_proc_address(s) as *const _);
-        let gl_ctx = window.gl_create_context()?;
+            .build()
+            .unwrap();
+        gl::load_with(|s| video.gl_get_proc_address(s).cast());
+        let gl_ctx = window.gl_create_context().unwrap();
 
-        let controller_ctx = ctx.game_controller()?;
-        let event_pump = ctx.event_pump()?;
+        let controller_ctx = ctx.game_controller().unwrap();
+        let event_pump = ctx.event_pump().unwrap();
 
         unsafe {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Color3f(1.0, 1.0, 1.0);
         }
 
-        Ok(Self {
+        Self {
             controller_ctx,
             event_pump,
             window,
@@ -102,7 +106,7 @@ impl Platform for SdlPlatform {
             keyboard_buttons: Buttons::empty(),
 
             controller: None,
-        })
+        }
     }
 
     fn should_run(&self) -> bool {
@@ -110,10 +114,11 @@ impl Platform for SdlPlatform {
     }
 
     fn time_msec(&self) -> u64 {
-        self.epoch.elapsed().as_millis() as u64
+        self.epoch.elapsed().as_millis().try_into()
+            .expect("you've been running the game too long!")
     }
 
-    fn end_frame<'a>(&mut self, lines: &[((f32, f32), (f32, f32))]) {
+    fn end_frame(&mut self, lines: &[Line]) {
         unsafe {
             // clear screen
             gl::Clear(gl::COLOR_BUFFER_BIT);
@@ -147,16 +152,12 @@ impl Platform for SdlPlatform {
                     _ => {}
                 }
 
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(keycode) = keycode {
-                        self.keyboard_buttons |= get_keycode_bitmask(keycode);
-                    }
+                Event::KeyDown { keycode: Some(keycode), .. } => {
+                    self.keyboard_buttons |= get_keycode_bitmask(keycode);
                 },
 
-                Event::KeyUp { keycode, .. } => {
-                    if let Some(keycode) = keycode {
-                        self.keyboard_buttons &= !get_keycode_bitmask(keycode);
-                    }
+                Event::KeyUp { keycode: Some(keycode), .. } => {
+                    self.keyboard_buttons &= !get_keycode_bitmask(keycode);
                 },
 
                 _ => {}
@@ -164,8 +165,8 @@ impl Platform for SdlPlatform {
         }
         // update dimensions
         let (width, height) = self.window.drawable_size();
-        self.width = width as u16;
-        self.height = height as u16;
+        self.width = u16::try_from(width).unwrap();
+        self.height = u16::try_from(height).unwrap();
     }
 
     fn width(&self) -> u16 {
@@ -194,14 +195,14 @@ impl Platform for SdlPlatform {
                             },
 
                             Err(e) => {
-                                eprintln!("failed to connect controller: {}", e);
+                                eprintln!("failed to connect controller: {e}");
                             }
                         }
                     }
                 },
 
                 Err(e) => {
-                    eprintln!("failed to query joysticks: {}", e);
+                    eprintln!("failed to query joysticks: {e}");
                 }
             }
         }

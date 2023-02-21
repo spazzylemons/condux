@@ -59,7 +59,14 @@ pub struct Renderer {
 
 const CUTOFF: f32 = 0.01;
 
+impl Default for Renderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Renderer {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             camera_pos: Vector::ZERO,
@@ -127,7 +134,7 @@ impl Renderer {
 
     pub fn render_spline(&self, frame: &mut Frame) {
         // in case no points loaded, don't draw
-        if self.spline_points.len() == 0 {
+        if self.spline_points.is_empty() {
             return;
         }
 
@@ -183,20 +190,20 @@ macro_rules! render_write {
 
 impl Mesh {
     pub fn load(asset: &mut Asset) -> Option<Self> {
-        let num_vertices = asset.read_byte()? as usize;
+        let num_vertices = asset.read_byte()?;
         let mut vertices = vec![];
         for _ in 0..num_vertices {
             vertices.push(asset.read_vector()?);
         }
-        let num_lines = asset.read_byte()? as usize;
+        let num_lines = asset.read_byte()?;
         let mut lines = vec![];
         for _ in 0..num_lines {
             let x = asset.read_byte()?;
-            if x >= num_vertices as u8 {
+            if x >= num_vertices {
                 return None;
             }
             let y = asset.read_byte()?;
-            if y >= num_vertices as u8 {
+            if y >= num_vertices {
                 return None;
             }
             lines.push((x, y));
@@ -206,9 +213,9 @@ impl Mesh {
 
     pub fn render(&self, renderer: &Renderer, translation: Vector, rotation: Mtx, frame: &mut Frame) {
         for (x, y) in &self.lines {
-            let a = Vector::from(self.vertices[*x as usize]);
+            let a = self.vertices[*x as usize];
             let a = a * rotation + translation;
-            let b = Vector::from(self.vertices[*y as usize]);
+            let b = self.vertices[*y as usize];
             let b = b * rotation + translation;
             renderer.line(a, b, frame);
         }

@@ -10,6 +10,7 @@ pub struct Asset {
 }
 
 impl Asset {
+    #[must_use]
     pub fn load(name: &str) -> Option<Self> {
         let contents = ASSETS.get_file(name)?.contents();
         Some(Self { contents, index: 0 })
@@ -19,7 +20,7 @@ impl Asset {
         if self.index >= self.contents.len() {
             return None;
         }
-        let b = self.contents[self.index] as u8;
+        let b = self.contents[self.index];
         self.index += 1;
         Some(b)
     }
@@ -27,7 +28,7 @@ impl Asset {
     pub fn read_fixed(&mut self) -> Option<f32> {
         let lo = self.read_byte()?;
         let hi = self.read_byte()?;
-        Some(f32::from((u16::from(lo) | (u16::from(hi) << 8)) as i16) / 256.0)
+        Some(f32::from(i16::from(lo) | (i16::from(hi) << 8)) / 256.0)
     }
 
     pub fn read_vector(&mut self) -> Option<Vector> {

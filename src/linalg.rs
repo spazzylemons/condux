@@ -4,24 +4,30 @@ use crate::timing::TICK_DELTA;
 
 /// Mixin that provides all length-related methods for both Vector and Quat.
 pub trait Length: Sized + Sub<Self, Output = Self> + DivAssign<f32> {
+    #[must_use]
     fn dot(&self, other: &Self) -> f32;
 
+    #[must_use]
     fn mag_sq(&self) -> f32 {
         self.dot(self)
     }
 
+    #[must_use]
     fn mag(&self) -> f32 {
         self.mag_sq().sqrt()
     }
 
+    #[must_use]
     fn dist_sq(self, other: Self) -> f32 {
         (self - other).mag_sq()
     }
 
+    #[must_use]
     fn dist(self, other: Self) -> f32 {
         self.dist_sq(other).sqrt()
     }
 
+    #[must_use]
     fn normalized(mut self) -> Self {
         let m = self.mag();
         if m != 0.0 {
@@ -61,10 +67,12 @@ impl Vector {
     pub const MIN: Self = Self::new(-f32::INFINITY, -f32::INFINITY, -f32::INFINITY);
     pub const MAX: Self = Self::new(f32::INFINITY, f32::INFINITY, f32::INFINITY);
 
+    #[must_use]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 
+    #[must_use]
     pub fn cross(&self, other: &Self) -> Self {
         Self::new(
             self.y * other.z - other.y * self.z,
@@ -73,6 +81,7 @@ impl Vector {
         )
     }
 
+    #[must_use]
     pub fn approach(mut self, strength: f32, to: &Self) -> Self {
         let strength = strength * TICK_DELTA;
         self /= 1.0 + strength;
@@ -80,6 +89,7 @@ impl Vector {
         self
     }
 
+    #[must_use]
     pub fn signed_angle(&self, to: &Self, axis: &Self) -> f32 {
         let cross = self.cross(to);
         let unsigned = cross.mag().atan2(self.dot(to));
@@ -166,16 +176,19 @@ pub struct Quat {
 impl Quat {
     pub const IDENT: Self = Self::new(1.0, 0.0, 0.0, 0.0);
 
+    #[must_use]
     pub const fn new(w: f32, x: f32, y: f32, z: f32) -> Self {
         Self { w, x, y, z }
     }
 
+    #[must_use]
     pub fn axis_angle(axis: &Vector, angle: f32) -> Self {
         let angle = angle * 0.5;
         let s = angle.sin();
         Self::new(angle.cos(), axis.x * s, axis.y * s, axis.z * s)
     }
 
+    #[must_use]
     pub fn slerp(a: Self, b: Self, t: f32) -> Self {
         let cos_half_theta = a.dot(&b);
         if cos_half_theta >= 1.0 {
@@ -286,41 +299,34 @@ pub struct Mtx {
 }
 
 impl Mtx {
-    pub const IDENT: Self = Self::new(
-        1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0,
-    );
+    pub const IDENT: Self = Self {
+        xx: 1.0, xy: 0.0, xz: 0.0,
+        yx: 0.0, yy: 1.0, yz: 0.0,
+        zx: 0.0, zy: 0.0, zz: 1.0,
+    };
 
-    pub const fn new(xx: f32, xy: f32, xz: f32, yx: f32, yy: f32, yz: f32, zx: f32, zy: f32, zz: f32) -> Mtx {
-        Self { xx, xy, xz, yx, yy, yz, zx, zy, zz }
-    }
-
+    #[must_use]
     pub fn transposed(mut self) -> Self {
-        let t = self.yx;
-        self.yx = self.xy;
-        self.xy = t;
-        let t = self.zx;
-        self.zx = self.xz;
-        self.xz = t;
-        let t = self.yz;
-        self.yz = self.zy;
-        self.zy = t;
+        std::mem::swap(&mut self.yx, &mut self.xy);
+        std::mem::swap(&mut self.zx, &mut self.xz);
+        std::mem::swap(&mut self.yz, &mut self.zy);
         self
     }
 
+    #[must_use]
     pub fn looking_at(at: Vector, up: Vector) -> Self {
         let z = -at.normalized();
         let x = up.cross(&z).normalized();
         let y = z.cross(&x);
 
-        Self::new(
-            x.x, x.y, x.z,
-            y.x, y.y, y.z,
-            z.x, z.y, z.z,
-        )
+        Self {
+            xx: x.x, xy: x.y, xz: x.z,
+            yx: y.x, yy: y.y, yz: y.z,
+            zx: z.x, zy: z.y, zz: z.z,
+        }
     }
 
+    #[must_use]
     pub fn axis_angle(axis: &Vector, angle: f32) -> Self {
         let cos = angle.cos();
         let a = axis.x * axis.x;
@@ -343,7 +349,11 @@ impl Mtx {
         let b = axis.x * sin;
         let yz = a - b;
         let zy = a + b;
-        Self::new(xx, xy, xz, yx, yy, yz, zx, zy, zz)
+        Self {
+            xx, xy, xz,
+            yx, yy, yz,
+            zx, zy, zz,
+        }
     }
 }
 
@@ -367,7 +377,11 @@ impl From<Quat> for Mtx {
         let b = q.x * q.w;
         let yz = 2.0 * (a - b);
         let zy = 2.0 * (a + b);
-        Self::new(xx, xy, xz, yx, yy, yz, zx, zy, zz)
+        Self {
+            xx, xy, xz,
+            yx, yy, yz,
+            zx, zy, zz,
+        }
     }
 }
 
@@ -391,7 +405,11 @@ impl MulAssign<Mtx> for Mtx {
         let zx = x * rhs.xx + y * rhs.yx + z * rhs.zx;
         let zy = x * rhs.xy + y * rhs.yy + z * rhs.zy;
         let zz = x * rhs.xz + y * rhs.yz + z * rhs.zz;
-        *self = Self::new(xx, xy, xz, yx, yy, yz, zx, zy, zz);
+        *self = Self {
+            xx, xy, xz,
+            yx, yy, yz,
+            zx, zy, zz,
+        }
     }
 }
 
