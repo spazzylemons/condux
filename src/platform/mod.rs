@@ -3,10 +3,12 @@ use bitflags::bitflags;
 pub type Point = (f32, f32);
 pub type Line = (Point, Point);
 
-pub struct Frame<'a> {
+pub struct GenericFrame<'a, P> where P: Platform {
     lines: Vec<Line>,
-    pub platform: &'a mut dyn Platform,
+    pub platform: &'a mut P,
 }
+
+pub type Frame<'a> = GenericFrame<'a, Impl>;
 
 bitflags! {
     pub struct Buttons: u8 {
@@ -43,8 +45,8 @@ pub trait Platform {
 
     fn time_msec(&self) -> u64;
 
-    fn start_frame(&mut self) -> Frame<'_> where Self: Sized {
-        Frame {
+    fn start_frame(&mut self) -> GenericFrame<'_, Self> where Self: Sized {
+        GenericFrame::<'_, Self> {
             lines: vec![],
             platform: self,
         }
@@ -61,10 +63,18 @@ pub trait Platform {
 
 #[cfg(target_os = "horizon")]
 pub mod ctr;
-#[cfg(not(target_os = "horizon"))]
+
+#[cfg(target_arch = "wasm32")]
+pub mod web;
+
+#[cfg(not(any(target_os = "horizon", target_arch = "wasm32")))]
 pub mod sdl;
 
 #[cfg(target_os = "horizon")]
 pub type Impl = ctr::CitroPlatform;
-#[cfg(not(target_os = "horizon"))]
+
+#[cfg(target_arch = "wasm32")]
+pub type Impl = web::WebPlatform;
+
+#[cfg(not(any(target_os = "horizon", target_arch = "wasm32")))]
 pub type Impl = sdl::SdlPlatform;

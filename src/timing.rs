@@ -1,4 +1,4 @@
-use crate::platform::Platform;
+use crate::platform::{Impl, Platform};
 
 pub const TICKS_PER_SECOND: u8 = 60;
 pub const TICK_DELTA: f32 = 1.0 / (TICKS_PER_SECOND as f32);
@@ -10,7 +10,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new(platform: &dyn Platform) -> Self {
+    pub fn new(platform: &Impl) -> Self {
         Self {
             start_ms: platform.time_msec(),
             num_seconds: 0,
@@ -25,7 +25,7 @@ impl Timer {
     }
 
     /// Return the number of ticks to run for this frame, as well as interpolation
-    pub fn frame_ticks(&mut self, platform: &dyn Platform) -> (u16, f32) {
+    pub fn frame_ticks(&mut self, platform: &Impl) -> (u16, f32) {
         let millis = platform.time_msec();
         let mut ticks = 0;
         while millis >= self.tick_ms() {

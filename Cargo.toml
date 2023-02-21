@@ -3,11 +3,34 @@ name = "condux"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["rlib"]
+
 [build-dependencies]
-bindgen = "0.64.0"
 gl_generator = "0.14.0"
 
-[target.'cfg(not(target_os = "horizon"))'.dependencies]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.84"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3.61"
+features = [
+    'CanvasRenderingContext2d',
+    'Document',
+    'Element',
+    'EventTarget',
+    'Gamepad',
+    'GamepadButton',
+    'GamepadMappingType',
+    'HtmlCanvasElement',
+    'KeyboardEvent',
+    'Navigator',
+    'Node',
+    'Performance',
+    'Window',
+]
+
+[target.'cfg(not(any(target_os = "horizon", target_arch = "wasm32")))'.dependencies]
 sdl2 = "0.35.2"
 
 [target.armv6k-nintendo-3ds.dependencies]
@@ -19,3 +42,11 @@ citro3d-sys = { git = "https://github.com/rust3ds/citro3d-rs.git" }
 [dependencies]
 include_dir = "0.7.3"
 bitflags = "1.3.2"
+ouroboros = "0.15.6"
+
+[workspace]
+members = ['condux-app', 'condux-web']
+
+[profile.release]
+lto = true
+opt-level = "z"

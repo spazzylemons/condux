@@ -22,7 +22,7 @@ pub struct Vehicle<'a> {
     pub velocity: Vector,
     pub steering: f32,
     pub ty: &'a Model,
-    pub controller: &'a dyn Controller,
+    pub controller: Box<dyn Controller + 'a>,
 }
 
 impl<'a> Vehicle<'a> {

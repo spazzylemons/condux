@@ -1,6 +1,6 @@
 use std::{fmt::Write};
 
-use crate::{linalg::{Vector, Mtx}, spline::Spline, assets::Asset, platform::Frame};
+use crate::{linalg::{Vector, Mtx}, spline::Spline, assets::Asset, platform::{Frame, Platform}};
 
 pub struct Mesh {
     vertices: Vec<Vector>,

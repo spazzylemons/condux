@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "build-debug": "webpack --mode development",
+    "serve-debug": "webpack serve --mode development",
+    "build-release": "webpack --mode production",
+    "serve-release": "webpack serve --mode production"
+  },
+  "devDependencies": {
+    "@wasm-tool/wasm-pack-plugin": "^1.6.0",
+    "html-webpack-plugin": "^5.5.0",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1",
+    "webpack-dev-server": "^4.11.1"
+  }
+}

@@ -84,7 +84,7 @@ impl<'a> GameState<'a> {
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, ty: &'a Model, controller: &'a dyn Controller){
+    pub fn spawn(&mut self, pos: Vector, ty: &'a Model, controller: Box<dyn Controller + 'a>) {
         let vehicle = Vehicle {
             position: pos,
             rotation: Quat::IDENT,
