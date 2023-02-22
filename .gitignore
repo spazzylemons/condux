@@ -1,11 +1,4 @@
-# godot ignores
-.import/
-
-# c ignores
-.vscode/
-build/
-condux
-condux.elf
-condux.dol
-condux.3dsx
-web/index.wasm
+target/
+node_modules/
+pkg/
+dist/
