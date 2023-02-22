@@ -115,6 +115,8 @@ impl<'a> GameState<'a> {
             ty,
             controller,
             steering: 0.0,
+            needs_respawn: false,
+            respawn_point: pos,
         };
 
         let prev_pos = vehicle.position;
@@ -162,10 +164,37 @@ impl<'a> GameState<'a> {
         let vehicle = &self.vehicle_states[focus].vehicle;
         self.camera.pos = target_pos(vehicle);
         self.camera.look_at(vehicle);
+        // update prev camera as well
+        self.prev_camera = self.camera.clone();
     }
 
     pub fn update(&mut self, focus: usize) {
-        // first, run physics on all vehicles
+        // check all vehicles that may need to respawn
+        let mut need_to_reset_camera = false;
+        for (i, state) in self.vehicle_states.iter_mut().enumerate() {
+            if state.vehicle.needs_respawn {
+                // reset vehicle position, including interpolation
+                state.vehicle.position = state.vehicle.respawn_point;
+                state.prev_pos = state.vehicle.respawn_point;
+                // reset the rest of the vehicle state and interpolation
+                state.prev_rot = Quat::IDENT;
+                state.vehicle.rotation = Quat::IDENT;
+                state.vehicle.steering = 0.0;
+                state.prev_steering = 0.0;
+                state.vehicle.velocity = Vector::ZERO;
+                // unmark the respawn flag
+                state.vehicle.needs_respawn = false;
+                // if this is the focused vehicle, reset the camera as well
+                if i == focus {
+                    need_to_reset_camera = true;
+                }
+            }
+        }
+        if need_to_reset_camera {
+            self.teleport_camera(focus);
+        }
+
+        // run physics on all vehicles
         let mut total_translations = vec![];
         let mut original_velocity = vec![];
         let mut momentum_neighbors = vec![];

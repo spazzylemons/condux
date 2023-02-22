@@ -100,13 +100,7 @@ impl Game {
                 let mut state = GameState::new(spline, octree, renderer);
                 // spawn player
                 let spawn = state.spline.get_baked(0.0);
-                state.spawn(
-                    spawn,
-                    model,
-                    Box::new(PlayerController {
-                        controls: &controls,
-                    }),
-                );
+                state.spawn(spawn, model, Box::new(PlayerController { controls }));
                 // spawn some other vehicles
                 let spawn = state.spline.get_baked(5.0);
                 state.spawn(spawn, model, Box::new(EmptyController));

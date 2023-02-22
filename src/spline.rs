@@ -20,6 +20,7 @@ use crate::{
     assets::Asset,
     linalg::{Length, Mtx, Vector},
     octree::Octree,
+    vehicle::Vehicle,
 };
 
 const BAKE_LENGTH_SQ: f32 = 1.0;
@@ -51,8 +52,20 @@ pub struct Spline {
     pub length: f32,
 }
 
+pub enum CollisionState {
+    /// The vehicle is above (or slightly below) the spline, and gravity should be applied.
+    Gravity { up: Vector, height: f32 },
+    /// The vehicle is close enough to the spline that it is considered in bounds.
+    InBounds,
+    /// The vehicle is considered out of bounds.
+    OutOfBounds,
+}
+
 impl Spline {
+    /// The radius of the spline.
     pub const TRACK_RADIUS: f32 = 2.0;
+    /// The extended spline radius for bounds checks.
+    pub const BOUNDS_RADIUS: f32 = 5.0;
 
     const MAX_BAKE_DEPTH: usize = 5;
 
@@ -280,15 +293,29 @@ impl Spline {
     }
 
     #[must_use]
-    pub fn get_up_height(&self, octree: &Octree, pos: Vector) -> Option<(Vector, f32)> {
-        let offset = octree.find_closest_offset(self, pos);
+    pub fn get_collision(&self, octree: &Octree, pos: Vector) -> CollisionState {
+        let offset = if let Some(offset) = octree.find_closest_offset(self, pos) {
+            offset
+        } else {
+            return CollisionState::OutOfBounds;
+        };
         let point = self.get_baked(offset);
         let (up, right) = self.get_up_right(offset);
         let d = pos - point;
-        if right.dot(&d).abs() > Self::TRACK_RADIUS {
-            None
+        let radius = right.dot(&d).abs();
+        if radius > Self::BOUNDS_RADIUS {
+            // bounds radius check
+            CollisionState::OutOfBounds
         } else {
-            Some((up, up.dot(&d)))
+            let height = up.dot(&d);
+            if !(-Vehicle::COLLISION_DEPTH..=Vehicle::MAX_GRAVITY_HEIGHT).contains(&height) {
+                // collision height check
+                CollisionState::OutOfBounds
+            } else if radius <= Self::TRACK_RADIUS {
+                CollisionState::Gravity { up, height }
+            } else {
+                CollisionState::InBounds
+            }
         }
     }
 

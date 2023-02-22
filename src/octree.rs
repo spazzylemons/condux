@@ -20,7 +20,8 @@ const MAX_DEPTH: usize = 3;
 
 struct OctreeListEntry {
     index: usize,
-    sides: u8,
+    min: Vector,
+    max: Vector,
 }
 
 struct OctreeNode {
@@ -47,28 +48,21 @@ pub struct Octree {
     root: OctreeNode,
 }
 
-fn select_which(entries: &[OctreeListEntry], which: [bool; 3]) -> impl Iterator<Item = usize> + '_ {
+fn select_which<'a>(
+    entries: &'a [OctreeListEntry],
+    point: &'a Vector,
+) -> impl Iterator<Item = usize> + 'a {
     entries
         .iter()
         .filter(move |entry| {
-            (!which[0] || (entry.sides & 1) == 0)
-                && (which[0] || (entry.sides & 2) == 0)
-                && (!which[1] || (entry.sides & 4) == 0)
-                && (which[1] || (entry.sides & 8) == 0)
-                && (!which[2] || (entry.sides & 16) == 0)
-                && (which[2] || (entry.sides & 32) == 0)
+            entry.min.x <= point.x
+                && entry.max.x >= point.x
+                && entry.min.y <= point.y
+                && entry.max.y >= point.y
+                && entry.min.z <= point.z
+                && entry.max.z >= point.z
         })
         .map(|entry| entry.index)
-}
-
-fn sides_to_bitmask(which: [Option<bool>; 3]) -> u8 {
-    let mut sides = 0;
-    for (j, w) in which.iter().enumerate() {
-        if let Some(b) = w {
-            sides |= 1 << ((j << 1) as u8 | u8::from(*b));
-        }
-    }
-    sides
 }
 
 fn check_bounds(v: Vector, min: &mut Vector, max: &mut Vector) {
@@ -88,7 +82,7 @@ fn get_bounds(spline: &Spline, i: usize) -> (Vector, Vector) {
         &spline.baked[(i + 1) % spline.baked.len()],
     ] {
         let (up, right) = spline.get_up_right(b.offset);
-        let right = right * Spline::TRACK_RADIUS;
+        let right = right * Spline::BOUNDS_RADIUS;
         let above = up * Vehicle::MAX_GRAVITY_HEIGHT;
         let below = up * -Vehicle::COLLISION_DEPTH;
         check_bounds(above - right + b.point, &mut min, &mut max);
@@ -190,14 +184,13 @@ impl OctreeNode {
         segment_max: &Vector,
         func: F,
     ) where
-        F: FnOnce(&mut Self, u8),
+        F: FnOnce(&mut Self),
     {
         let which = search_octree(segment_min, segment_max, &mut min, &mut max);
         if let Some(child) = self.extract_child(which) {
             child.add(min, max, segment_min, segment_max, func);
         } else {
-            let bitmask = sides_to_bitmask(which);
-            func(self, bitmask);
+            func(self);
         }
     }
 }
@@ -220,8 +213,12 @@ impl Octree {
         // for each segment, figure out where to put it
         for i in 0..spline.baked.len() {
             let (segment_min, segment_max) = get_bounds(spline, i);
-            root.add(min, max, &segment_min, &segment_max, |node, sides| {
-                node.segments.push(OctreeListEntry { index: i, sides });
+            root.add(min, max, &segment_min, &segment_max, |node| {
+                node.segments.push(OctreeListEntry {
+                    index: i,
+                    min: segment_min,
+                    max: segment_max,
+                });
             });
         }
         Self { min, max, root }
@@ -244,15 +241,14 @@ impl Octree {
                 2.0 * Vehicle::RADIUS,
                 2.0 * Vehicle::RADIUS,
             );
-        self.root.add(
-            self.min,
-            self.max,
-            &vehicle_min,
-            &vehicle_max,
-            |node, sides| {
-                node.vehicles.push(OctreeListEntry { index, sides });
-            },
-        );
+        self.root
+            .add(self.min, self.max, &vehicle_min, &vehicle_max, |node| {
+                node.vehicles.push(OctreeListEntry {
+                    index,
+                    min: vehicle_min,
+                    max: vehicle_max,
+                });
+            });
     }
 
     #[must_use]
@@ -264,7 +260,7 @@ impl Octree {
         loop {
             let which = search_existing_octree(point, &mut search_min, &mut search_max);
 
-            for index in select_which(&current.vehicles, which) {
+            for index in select_which(&current.vehicles, point) {
                 result.push(index);
             }
 
@@ -277,20 +273,20 @@ impl Octree {
     }
 
     #[must_use]
-    pub fn find_closest_offset(&self, spline: &Spline, point: Vector) -> f32 {
+    pub fn find_closest_offset(&self, spline: &Spline, point: Vector) -> Option<f32> {
         let mut search_min = self.min;
         let mut search_max = self.max;
         let mut current = &self.root;
-        let mut result = 0.0;
+        let mut result = None;
         let mut best_dist_sq = f32::INFINITY;
         loop {
             let which = search_existing_octree(&point, &mut search_min, &mut search_max);
 
-            for index in select_which(&current.segments, which) {
+            for index in select_which(&current.segments, &point) {
                 let (offset, dist_sq) = spline.get_offset_and_dist_sq(point, index);
                 if dist_sq < best_dist_sq {
                     best_dist_sq = dist_sq;
-                    result = offset;
+                    result = Some(offset);
                 }
             }
 

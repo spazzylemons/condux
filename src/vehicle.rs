@@ -21,15 +21,16 @@ use crate::{
     octree::Octree,
     platform::{Buttons, Controls},
     render::Mesh,
-    spline::Spline,
+    spline::{CollisionState, Spline},
     timing::TICK_DELTA,
 };
 
 const GRAVITY_APPROACH_SPEED: f32 = 5.0;
-const GRAVITY_STRENGTH: f32 = 15.0;
+const GRAVITY_STRENGTH: f32 = 6.0;
 const FRICTION_COEFFICIENT: f32 = 0.1;
 const GRAVITY_FALLOFF_POINT: f32 = 2.0;
 const STEERING_APPROACH_SPEED: f32 = 6.0;
+const GRAVITY_TERMINAL_VELOCITY: f32 = 8.0;
 
 pub struct Model {
     pub speed: f32,
@@ -46,14 +47,23 @@ pub struct Vehicle<'a> {
     pub steering: f32,
     pub ty: &'a Model,
     pub controller: Box<dyn Controller + 'a>,
+    /// Set to true when the vehicle should respawn. The game engine will then
+    /// respawn the vehicle on the next frame.
+    pub needs_respawn: bool,
+    /// The location to respawn to.
+    pub respawn_point: Vector,
 }
 
 impl<'a> Vehicle<'a> {
     pub const RADIUS: f32 = 0.3;
 
-    pub const MAX_GRAVITY_HEIGHT: f32 = 5.0;
+    pub const MAX_GRAVITY_HEIGHT: f32 = 8.0;
 
     pub const COLLISION_DEPTH: f32 = 0.25;
+
+    /// If height above track is at or below this, the vehicle snaps to the ground.
+    /// This prevents the vehicle from bumping around.
+    const GRAVITY_SNAP: f32 = 0.15;
 
     #[must_use]
     pub fn up_vector(&self) -> Vector {
@@ -118,7 +128,7 @@ impl<'a> Vehicle<'a> {
         // apply gravity
         self.velocity -= up * (GRAVITY_STRENGTH * TICK_DELTA);
         // get amount of gravity being experienced
-        let gravity = self.gravity();
+        let mut gravity = self.gravity();
         let mut without = self.velocity - gravity;
         self.apply_acceleration_no_speed_cap(&mut without, forward);
         // speed cap
@@ -127,6 +137,10 @@ impl<'a> Vehicle<'a> {
             without = without.normalized() * speed;
         }
         self.approach_aligned_without_gravity(forward, &mut without);
+        // limit gravity
+        if gravity.mag_sq() > GRAVITY_TERMINAL_VELOCITY * GRAVITY_TERMINAL_VELOCITY {
+            gravity = gravity.normalized() * GRAVITY_TERMINAL_VELOCITY;
+        }
         // combine parts of velocity
         self.velocity = gravity + without;
         // slide with physics
@@ -135,25 +149,25 @@ impl<'a> Vehicle<'a> {
 
     fn collide_with_spline(&mut self, spline: &Spline, octree: &Octree) -> Vector {
         let mut new_gravity_vector = Vector::Y_AXIS;
-        if let Some((up, height)) = spline.get_up_height(octree, self.position) {
-            if height <= 0.0 && height > -Self::COLLISION_DEPTH {
-                self.velocity = self.velocity_without_gravity();
-                // collided with floor, apply some friction
-                let with_friction = self.velocity
-                    - self.velocity.normalized()
-                        * FRICTION_COEFFICIENT
-                        * GRAVITY_STRENGTH
-                        * TICK_DELTA;
-                if with_friction.dot(&self.velocity) <= 0.0 {
-                    // if dot product is flipped, direction flipped, so set velocity to zero
-                    self.velocity = Vector::ZERO;
-                } else {
-                    // otherwise, use friction
-                    self.velocity = with_friction;
+        match spline.get_collision(octree, self.position) {
+            CollisionState::Gravity { up, height } => {
+                if height <= Self::GRAVITY_SNAP {
+                    self.velocity = self.velocity_without_gravity();
+                    // collided with floor, apply some friction
+                    let with_friction = self.velocity
+                        - self.velocity.normalized()
+                            * FRICTION_COEFFICIENT
+                            * GRAVITY_STRENGTH
+                            * TICK_DELTA;
+                    if with_friction.dot(&self.velocity) <= 0.0 {
+                        // if dot product is flipped, direction flipped, so set velocity to zero
+                        self.velocity = Vector::ZERO;
+                    } else {
+                        // otherwise, use friction
+                        self.velocity = with_friction;
+                    }
+                    self.position -= up * height;
                 }
-                self.position -= up * height;
-            }
-            if height > -Self::COLLISION_DEPTH && height < Self::MAX_GRAVITY_HEIGHT {
                 let height = height - GRAVITY_FALLOFF_POINT;
                 let height = height / Self::MAX_GRAVITY_HEIGHT - GRAVITY_FALLOFF_POINT;
                 let height = height.clamp(0.0, 1.0);
@@ -161,6 +175,15 @@ impl<'a> Vehicle<'a> {
                 new_gravity_vector += up * (1.0 - height);
                 // TODO is this necessary?
                 new_gravity_vector = new_gravity_vector.normalized();
+            }
+
+            CollisionState::InBounds => {
+                // nothing to do, we're in bounds
+            }
+
+            CollisionState::OutOfBounds => {
+                // we're out of bounds, we'll signal that we need a respawn
+                self.needs_respawn = true;
             }
         }
         new_gravity_vector
