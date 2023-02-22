@@ -47,9 +47,9 @@ pub struct Vehicle<'a> {
     pub steering: f32,
     pub ty: &'a Model,
     pub controller: Box<dyn Controller + 'a>,
-    /// Set to true when the vehicle should respawn. The game engine will then
-    /// respawn the vehicle on the next frame.
-    pub needs_respawn: bool,
+    /// When containing a value, the vehicle cannot be controlled, does not collide
+    /// with the track, and will be respawned when the timer reaches zero.
+    pub respawn_timer: Option<u8>,
     /// The location to respawn to.
     pub respawn_point: Vector,
 }
@@ -63,7 +63,10 @@ impl<'a> Vehicle<'a> {
 
     /// If height above track is at or below this, the vehicle snaps to the ground.
     /// This prevents the vehicle from bumping around.
-    const GRAVITY_SNAP: f32 = 0.15;
+    const GRAVITY_SNAP: f32 = 0.05;
+
+    /// This is the number of frames that respawn_timer is set to.
+    const RESPAWN_TIMER_INIT: u8 = 60;
 
     #[must_use]
     pub fn up_vector(&self) -> Vector {
@@ -88,6 +91,10 @@ impl<'a> Vehicle<'a> {
     }
 
     fn handle_steering(&mut self) {
+        // only if we're not going to respawn
+        if self.respawn_timer.is_some() {
+            return;
+        }
         let steering = self.controller.steering();
         // local rotate for steering
         let steering_rotation =
@@ -99,6 +106,10 @@ impl<'a> Vehicle<'a> {
     }
 
     fn apply_acceleration_no_speed_cap(&mut self, without: &mut Vector, forward: Vector) {
+        // only if we're not going to respawn
+        if self.respawn_timer.is_some() {
+            return;
+        }
         let pedal = self.controller.pedal();
         *without += forward * (pedal * self.ty.acceleration * TICK_DELTA);
     }
@@ -149,41 +160,45 @@ impl<'a> Vehicle<'a> {
 
     fn collide_with_spline(&mut self, spline: &Spline, octree: &Octree) -> Vector {
         let mut new_gravity_vector = Vector::Y_AXIS;
-        match spline.get_collision(octree, self.position) {
-            CollisionState::Gravity { up, height } => {
-                if height <= Self::GRAVITY_SNAP {
-                    self.velocity = self.velocity_without_gravity();
-                    // collided with floor, apply some friction
-                    let with_friction = self.velocity
-                        - self.velocity.normalized()
-                            * FRICTION_COEFFICIENT
-                            * GRAVITY_STRENGTH
-                            * TICK_DELTA;
-                    if with_friction.dot(&self.velocity) <= 0.0 {
-                        // if dot product is flipped, direction flipped, so set velocity to zero
-                        self.velocity = Vector::ZERO;
-                    } else {
-                        // otherwise, use friction
-                        self.velocity = with_friction;
+        // only do this if the respawn timer is none
+        if self.respawn_timer.is_none() {
+            // check collision
+            match spline.get_collision(octree, self.position) {
+                CollisionState::Gravity { up, height } => {
+                    if height <= Self::GRAVITY_SNAP {
+                        self.velocity = self.velocity_without_gravity();
+                        // collided with floor, apply some friction
+                        let with_friction = self.velocity
+                            - self.velocity.normalized()
+                                * FRICTION_COEFFICIENT
+                                * GRAVITY_STRENGTH
+                                * TICK_DELTA;
+                        if with_friction.dot(&self.velocity) <= 0.0 {
+                            // if dot product is flipped, direction flipped, so set velocity to zero
+                            self.velocity = Vector::ZERO;
+                        } else {
+                            // otherwise, use friction
+                            self.velocity = with_friction;
+                        }
+                        self.position -= up * height;
                     }
-                    self.position -= up * height;
+                    let height = height - GRAVITY_FALLOFF_POINT;
+                    let height = height / Self::MAX_GRAVITY_HEIGHT - GRAVITY_FALLOFF_POINT;
+                    let height = height.clamp(0.0, 1.0);
+                    new_gravity_vector *= height;
+                    new_gravity_vector += up * (1.0 - height);
+                    // TODO is this necessary?
+                    new_gravity_vector = new_gravity_vector.normalized();
                 }
-                let height = height - GRAVITY_FALLOFF_POINT;
-                let height = height / Self::MAX_GRAVITY_HEIGHT - GRAVITY_FALLOFF_POINT;
-                let height = height.clamp(0.0, 1.0);
-                new_gravity_vector *= height;
-                new_gravity_vector += up * (1.0 - height);
-                // TODO is this necessary?
-                new_gravity_vector = new_gravity_vector.normalized();
-            }
 
-            CollisionState::InBounds => {
-                // nothing to do, we're in bounds
-            }
+                CollisionState::InBounds => {
+                    // nothing to do, we're in bounds
+                }
 
-            CollisionState::OutOfBounds => {
-                // we're out of bounds, we'll signal that we need a respawn
-                self.needs_respawn = true;
+                CollisionState::OutOfBounds => {
+                    // we're out of bounds, we'll signal that we need a respawn
+                    self.respawn_timer = Some(Self::RESPAWN_TIMER_INIT);
+                }
             }
         }
         new_gravity_vector

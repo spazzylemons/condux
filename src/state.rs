@@ -115,7 +115,7 @@ impl<'a> GameState<'a> {
             ty,
             controller,
             steering: 0.0,
-            needs_respawn: false,
+            respawn_timer: None,
             respawn_point: pos,
         };
 
@@ -138,21 +138,25 @@ impl<'a> GameState<'a> {
         }
 
         self.prev_camera = self.camera.clone();
-        // set ourselves to the proper distance
-        let tmp = Vector::Z_AXIS
-            * (self.vehicle_states[focus]
-                .vehicle
-                .position
-                .dist(self.camera.pos)
-                - CAMERA_FOLLOW_DISTANCE);
-        let delta = self.camera.pos - self.vehicle_states[focus].vehicle.position;
-        let up = self.vehicle_states[focus].vehicle.up_vector();
-        let camera_mtx = Mtx::looking_at(delta, up);
-        let translation_global = camera_mtx * tmp;
-        self.camera.pos += translation_global;
-        // approach target location
-        let target = target_pos(&self.vehicle_states[focus].vehicle);
-        self.camera.pos = self.camera.pos.approach(CAMERA_APPROACH_SPEED, &target);
+        // only do this if the vehicle won't respawn
+        // this lets us see the vehicle fall
+        if self.vehicle_states[focus].vehicle.respawn_timer.is_none() {
+            // set ourselves to the proper distance
+            let tmp = Vector::Z_AXIS
+                * (self.vehicle_states[focus]
+                    .vehicle
+                    .position
+                    .dist(self.camera.pos)
+                    - CAMERA_FOLLOW_DISTANCE);
+            let delta = self.camera.pos - self.vehicle_states[focus].vehicle.position;
+            let up = self.vehicle_states[focus].vehicle.up_vector();
+            let camera_mtx = Mtx::looking_at(delta, up);
+            let translation_global = camera_mtx * tmp;
+            self.camera.pos += translation_global;
+            // approach target location
+            let target = target_pos(&self.vehicle_states[focus].vehicle);
+            self.camera.pos = self.camera.pos.approach(CAMERA_APPROACH_SPEED, &target);
+        }
         self.camera.look_at(&self.vehicle_states[focus].vehicle);
     }
 
@@ -172,21 +176,29 @@ impl<'a> GameState<'a> {
         // check all vehicles that may need to respawn
         let mut need_to_reset_camera = false;
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
-            if state.vehicle.needs_respawn {
-                // reset vehicle position, including interpolation
-                state.vehicle.position = state.vehicle.respawn_point;
-                state.prev_pos = state.vehicle.respawn_point;
-                // reset the rest of the vehicle state and interpolation
-                state.prev_rot = Quat::IDENT;
-                state.vehicle.rotation = Quat::IDENT;
-                state.vehicle.steering = 0.0;
-                state.prev_steering = 0.0;
-                state.vehicle.velocity = Vector::ZERO;
-                // unmark the respawn flag
-                state.vehicle.needs_respawn = false;
-                // if this is the focused vehicle, reset the camera as well
-                if i == focus {
-                    need_to_reset_camera = true;
+            if let Some(timer) = state.vehicle.respawn_timer {
+                // decrement timer
+                let timer = timer - 1;
+                // if we hit zero, respawn
+                if timer == 0 {
+                    // reset vehicle position, including interpolation
+                    state.vehicle.position = state.vehicle.respawn_point;
+                    state.prev_pos = state.vehicle.respawn_point;
+                    // reset the rest of the vehicle state and interpolation
+                    state.prev_rot = Quat::IDENT;
+                    state.vehicle.rotation = Quat::IDENT;
+                    state.vehicle.steering = 0.0;
+                    state.prev_steering = 0.0;
+                    state.vehicle.velocity = Vector::ZERO;
+                    // clear respawn timer
+                    state.vehicle.respawn_timer = None;
+                    // if this is the focused vehicle, reset the camera as well
+                    if i == focus {
+                        need_to_reset_camera = true;
+                    }
+                } else {
+                    // otherwise, just update timer
+                    state.vehicle.respawn_timer = Some(timer);
                 }
             }
         }
