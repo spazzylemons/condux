@@ -1,6 +1,13 @@
 use std::fmt::Write;
 
-use crate::{linalg::{Vector, Quat, Mtx, Length}, vehicle::{Vehicle, Controller, Model}, render::Renderer, spline::Spline, octree::Octree, platform::Frame};
+use crate::{
+    linalg::{Length, Mtx, Quat, Vector},
+    octree::Octree,
+    platform::Frame,
+    render::Renderer,
+    spline::Spline,
+    vehicle::{Controller, Model, Vehicle},
+};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -93,12 +100,17 @@ impl<'a> GameState<'a> {
             controller,
             steering: 0.0,
         };
-    
+
         let prev_pos = vehicle.position;
         let prev_rot = vehicle.rotation;
         let prev_steering = vehicle.steering;
-    
-        let vehicle_state = VehicleState { vehicle, prev_pos, prev_rot, prev_steering };
+
+        let vehicle_state = VehicleState {
+            vehicle,
+            prev_pos,
+            prev_rot,
+            prev_steering,
+        };
         self.vehicle_states.push(vehicle_state);
     }
 
@@ -109,7 +121,12 @@ impl<'a> GameState<'a> {
 
         self.prev_camera = self.camera.clone();
         // set ourselves to the proper distance
-        let tmp = Vector::Z_AXIS * (self.vehicle_states[focus].vehicle.position.dist(self.camera.pos) - CAMERA_FOLLOW_DISTANCE);
+        let tmp = Vector::Z_AXIS
+            * (self.vehicle_states[focus]
+                .vehicle
+                .position
+                .dist(self.camera.pos)
+                - CAMERA_FOLLOW_DISTANCE);
         let delta = self.camera.pos - self.vehicle_states[focus].vehicle.position;
         let up = self.vehicle_states[focus].vehicle.up_vector();
         let camera_mtx = Mtx::looking_at(delta, up);
@@ -155,13 +172,16 @@ impl<'a> GameState<'a> {
 
         // next, find any collisions between vehicles
         for i in 0..self.vehicle_states.len() {
-            let collisions = self.octree.find_vehicle_collisions(&self.vehicle_states[i].vehicle.position);
+            let collisions = self
+                .octree
+                .find_vehicle_collisions(&self.vehicle_states[i].vehicle.position);
             for j in collisions {
                 if j <= i {
                     continue;
                 }
                 // measure collision vector
-                let normal = self.vehicle_states[i].vehicle.position - self.vehicle_states[j].vehicle.position;
+                let normal = self.vehicle_states[i].vehicle.position
+                    - self.vehicle_states[j].vehicle.position;
                 // measure distance
                 let length = normal.mag();
                 let depth = (Vehicle::RADIUS + Vehicle::RADIUS) - length;
@@ -192,19 +212,22 @@ impl<'a> GameState<'a> {
     }
 
     pub fn render(&mut self, ui_focus: usize, interp: f32, frame: &mut Frame) {
-        let interp_camera_pos = (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
-        let interp_camera_target = (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
+        let interp_camera_pos =
+            (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
+        let interp_camera_target =
+            (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
         let interp_camera_up = (self.camera.up * interp) + (self.prev_camera.up * (1.0 - interp));
 
-        self.renderer.set_camera(
-            interp_camera_pos,
-            interp_camera_target,
-            interp_camera_up,
-        );
+        self.renderer
+            .set_camera(interp_camera_pos, interp_camera_target, interp_camera_up);
 
         for state in &self.vehicle_states {
             let (pos, rot) = state.interpolate(interp);
-            state.vehicle.ty.mesh.render(&self.renderer, pos, rot, frame);
+            state
+                .vehicle
+                .ty
+                .mesh
+                .render(&self.renderer, pos, rot, frame);
         }
 
         self.renderer.render_spline(frame);

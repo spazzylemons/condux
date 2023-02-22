@@ -32,14 +32,17 @@ pub struct Octree {
 }
 
 fn select_which(entries: &[OctreeListEntry], which: [bool; 3]) -> impl Iterator<Item = usize> + '_ {
-    entries.iter().filter(move |entry| {
-        (!which[0] || (entry.sides & 1) == 0) &&
-        (which[0] || (entry.sides & 2) == 0) &&
-        (!which[1] || (entry.sides & 4) == 0) &&
-        (which[1] || (entry.sides & 8) == 0) &&
-        (!which[2] || (entry.sides & 16) == 0) &&
-        (which[2] || (entry.sides & 32) == 0)
-    }).map(|entry| entry.index)
+    entries
+        .iter()
+        .filter(move |entry| {
+            (!which[0] || (entry.sides & 1) == 0)
+                && (which[0] || (entry.sides & 2) == 0)
+                && (!which[1] || (entry.sides & 4) == 0)
+                && (which[1] || (entry.sides & 8) == 0)
+                && (!which[2] || (entry.sides & 16) == 0)
+                && (which[2] || (entry.sides & 32) == 0)
+        })
+        .map(|entry| entry.index)
 }
 
 fn sides_to_bitmask(which: [Option<bool>; 3]) -> u8 {
@@ -64,7 +67,10 @@ fn check_bounds(v: Vector, min: &mut Vector, max: &mut Vector) {
 fn get_bounds(spline: &Spline, i: usize) -> (Vector, Vector) {
     let mut min = Vector::MAX;
     let mut max = Vector::MIN;
-    for b in [&spline.baked[i], &spline.baked[(i + 1) % spline.baked.len()]] {
+    for b in [
+        &spline.baked[i],
+        &spline.baked[(i + 1) % spline.baked.len()],
+    ] {
         let (up, right) = spline.get_up_right(b.offset);
         let right = right * Spline::TRACK_RADIUS;
         let above = up * Vehicle::MAX_GRAVITY_HEIGHT;
@@ -122,7 +128,12 @@ macro_rules! search_axis {
     };
 }
 
-fn search_octree(segment_min: &Vector, segment_max: &Vector, min: &mut Vector, max: &mut Vector) -> [Option<bool>; 3] {
+fn search_octree(
+    segment_min: &Vector,
+    segment_max: &Vector,
+    min: &mut Vector,
+    max: &mut Vector,
+) -> [Option<bool>; 3] {
     let center = (*min + *max) * 0.5;
 
     [
@@ -155,8 +166,16 @@ impl OctreeNode {
         Some(&mut self.children.as_mut()?[pool_index(which)?])
     }
 
-    fn add<F>(&mut self, mut min: Vector, mut max: Vector, segment_min: &Vector, segment_max: &Vector, func: F)
-    where F: FnOnce(&mut Self, u8) {
+    fn add<F>(
+        &mut self,
+        mut min: Vector,
+        mut max: Vector,
+        segment_min: &Vector,
+        segment_max: &Vector,
+        func: F,
+    ) where
+        F: FnOnce(&mut Self, u8),
+    {
         let which = search_octree(segment_min, segment_max, &mut min, &mut max);
         if let Some(child) = self.extract_child(which) {
             child.add(min, max, segment_min, segment_max, func);
@@ -186,18 +205,10 @@ impl Octree {
         for i in 0..spline.baked.len() {
             let (segment_min, segment_max) = get_bounds(spline, i);
             root.add(min, max, &segment_min, &segment_max, |node, sides| {
-                node.segments.push(OctreeListEntry {
-                    index: i,
-                    sides,
-                });
+                node.segments.push(OctreeListEntry { index: i, sides });
             });
         }
-        Self {
-            min,
-            max,
-
-            root,
-        }
+        Self { min, max, root }
     }
 
     pub fn reset_vehicles(&mut self) {
@@ -205,19 +216,27 @@ impl Octree {
     }
 
     pub fn add_vehicle(&mut self, pos: Vector, index: usize) {
-        let vehicle_min = pos - Vector::new(
-            2.0 * Vehicle::RADIUS,
-            2.0 * Vehicle::RADIUS,
-            2.0 * Vehicle::RADIUS,
+        let vehicle_min = pos
+            - Vector::new(
+                2.0 * Vehicle::RADIUS,
+                2.0 * Vehicle::RADIUS,
+                2.0 * Vehicle::RADIUS,
+            );
+        let vehicle_max = pos
+            + Vector::new(
+                2.0 * Vehicle::RADIUS,
+                2.0 * Vehicle::RADIUS,
+                2.0 * Vehicle::RADIUS,
+            );
+        self.root.add(
+            self.min,
+            self.max,
+            &vehicle_min,
+            &vehicle_max,
+            |node, sides| {
+                node.vehicles.push(OctreeListEntry { index, sides });
+            },
         );
-        let vehicle_max = pos + Vector::new(
-            2.0 * Vehicle::RADIUS,
-            2.0 * Vehicle::RADIUS,
-            2.0 * Vehicle::RADIUS,
-        );
-        self.root.add(self.min, self.max, &vehicle_min, &vehicle_max, |node, sides| {
-            node.vehicles.push(OctreeListEntry { index, sides });
-        });
     }
 
     #[must_use]

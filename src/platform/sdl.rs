@@ -2,7 +2,7 @@ use sdl2::event::Event;
 
 use std::time::Instant;
 
-use super::{Platform, Controls, Buttons, Line};
+use super::{Buttons, Controls, Line, Platform};
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::style)]
@@ -75,7 +75,8 @@ impl Platform for SdlPlatform {
     fn init(preferred_width: u16, preferred_height: u16) -> Self {
         let ctx = sdl2::init().unwrap();
         let video = ctx.video().unwrap();
-        let window = video.window("window", preferred_width.into(), preferred_height.into())
+        let window = video
+            .window("window", preferred_width.into(), preferred_height.into())
             .position_centered()
             .opengl()
             .resizable()
@@ -115,7 +116,10 @@ impl Platform for SdlPlatform {
     }
 
     fn time_msec(&self) -> u64 {
-        self.epoch.elapsed().as_millis().try_into()
+        self.epoch
+            .elapsed()
+            .as_millis()
+            .try_into()
             .expect("you've been running the game too long!")
     }
 
@@ -144,22 +148,28 @@ impl Platform for SdlPlatform {
                     sdl2::event::WindowEvent::Close => {
                         // window close
                         self.should_run = false;
-                    },
+                    }
 
                     sdl2::event::WindowEvent::Resized(x, y) => unsafe {
                         gl::Viewport(0, 0, x, y);
                     },
 
                     _ => {}
+                },
+
+                Event::KeyDown {
+                    keycode: Some(keycode),
+                    ..
+                } => {
+                    self.keyboard_buttons |= get_keycode_bitmask(keycode);
                 }
 
-                Event::KeyDown { keycode: Some(keycode), .. } => {
-                    self.keyboard_buttons |= get_keycode_bitmask(keycode);
-                },
-
-                Event::KeyUp { keycode: Some(keycode), .. } => {
+                Event::KeyUp {
+                    keycode: Some(keycode),
+                    ..
+                } => {
                     self.keyboard_buttons &= !get_keycode_bitmask(keycode);
-                },
+                }
 
                 _ => {}
             }
@@ -188,19 +198,21 @@ impl Platform for SdlPlatform {
         // attempt to open a controller if not already opened
         if self.controller.is_none() {
             match self.controller_ctx.num_joysticks() {
-                Ok(n) => for i in 0..n {
-                    if self.controller_ctx.is_game_controller(i) {
-                        match self.controller_ctx.open(i) {
-                            Ok(controller) => {
-                                self.controller = Some(controller);
-                            },
+                Ok(n) => {
+                    for i in 0..n {
+                        if self.controller_ctx.is_game_controller(i) {
+                            match self.controller_ctx.open(i) {
+                                Ok(controller) => {
+                                    self.controller = Some(controller);
+                                }
 
-                            Err(e) => {
-                                eprintln!("failed to connect controller: {e}");
+                                Err(e) => {
+                                    eprintln!("failed to connect controller: {e}");
+                                }
                             }
                         }
                     }
-                },
+                }
 
                 Err(e) => {
                     eprintln!("failed to query joysticks: {e}");
@@ -217,7 +229,7 @@ impl Platform for SdlPlatform {
             }
             let mut axis = controller.axis(sdl2::controller::Axis::LeftX);
             if axis == -32768 {
-                axis = -32766;
+                axis = -32767;
             }
             steering = f32::from(axis) / 32767.0;
         } else {

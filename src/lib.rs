@@ -1,13 +1,14 @@
 #![cfg_attr(target_os = "horizon", feature(allocator_api))]
 
 use ouroboros::self_referencing;
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 mod assets;
 mod linalg;
-mod platform;
 mod octree;
+mod platform;
 #[macro_use]
 mod render;
 mod spline;
@@ -18,12 +19,19 @@ mod vehicle;
 use std::cell::Cell;
 
 use assets::Asset;
-use platform::{Platform, Controls, Buttons, Impl};
+use platform::{Buttons, Controls, Impl, Platform};
 use render::Mesh;
 
 const DEADZONE: f32 = 0.03;
 
-use crate::{state::GameState, timing::Timer, vehicle::{PlayerController, EmptyController, Model}, render::Renderer, spline::Spline, octree::Octree};
+use crate::{
+    octree::Octree,
+    render::Renderer,
+    spline::Spline,
+    state::GameState,
+    timing::Timer,
+    vehicle::{EmptyController, Model, PlayerController},
+};
 
 #[self_referencing]
 struct Game {
@@ -76,7 +84,13 @@ impl Game {
                 let mut state = GameState::new(spline, octree, renderer);
                 // spawn player
                 let spawn = state.spline.get_baked(0.0);
-                state.spawn(spawn, model, Box::new(PlayerController { controls: &controls }));
+                state.spawn(
+                    spawn,
+                    model,
+                    Box::new(PlayerController {
+                        controls: &controls,
+                    }),
+                );
                 // spawn some other vehicles
                 let spawn = state.spline.get_baked(5.0);
                 state.spawn(spawn, model, Box::new(EmptyController));
@@ -89,12 +103,17 @@ impl Game {
                 // return state object
                 state
             },
-        }.build()
+        }
+        .build()
     }
 
     fn should_run(&self) -> bool {
-        self.borrow_platform().should_run() &&
-            !self.borrow_controls().get().buttons.contains(Buttons::PAUSE)
+        self.borrow_platform().should_run()
+            && !self
+                .borrow_controls()
+                .get()
+                .buttons
+                .contains(Buttons::PAUSE)
     }
 
     fn update_controls(&mut self) {
@@ -136,30 +155,28 @@ pub fn run_game() {
 
     #[cfg(target_arch = "wasm32")]
     {
-        use std::{rc::Rc, cell::RefCell};
-    
+        use std::{cell::RefCell, rc::Rc};
+
         let f = Rc::new(RefCell::new(None));
         let g = f.clone();
-    
+
         let mut game = Game::init();
-    
+
         *g.borrow_mut() = Some(Closure::new(move || {
             if game.should_run() {
                 game.iteration();
                 request_animation_frame(f.borrow().as_ref().unwrap());
             }
         }));
-    
+
         request_animation_frame(g.borrow().as_ref().unwrap());
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-fn window() -> web_sys::Window {
-    web_sys::window().unwrap()
-}
-
-#[cfg(target_arch = "wasm32")]
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
-    window().request_animation_frame(f.as_ref().unchecked_ref()).unwrap();
+    web_sys::window()
+        .unwrap()
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .unwrap();
 }

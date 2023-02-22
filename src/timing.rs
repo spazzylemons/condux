@@ -36,8 +36,9 @@ impl Timer {
             }
             ticks += 1;
         }
-        let interp = (1.0 - (((self.tick_ms() - millis) as f32)
-            * (f32::from(TICKS_PER_SECOND) / 1000.0))).clamp(0.0, 1.0);
+        let interp = (1.0
+            - (((self.tick_ms() - millis) as f32) * (f32::from(TICKS_PER_SECOND) / 1000.0)))
+            .clamp(0.0, 1.0);
         (ticks, interp)
     }
 }

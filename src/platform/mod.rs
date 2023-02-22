@@ -3,7 +3,10 @@ use bitflags::bitflags;
 pub type Point = (f32, f32);
 pub type Line = (Point, Point);
 
-pub struct GenericFrame<'a, P> where P: Platform {
+pub struct GenericFrame<'a, P>
+where
+    P: Platform,
+{
     lines: Vec<Line>,
     pub platform: &'a mut P,
 }
@@ -12,12 +15,12 @@ pub type Frame<'a> = GenericFrame<'a, Impl>;
 
 bitflags! {
     pub struct Buttons: u8 {
-        const UP = 1 << 0;
-        const DOWN = 1 << 1;
-        const LEFT = 1 << 2;
+        const UP    = 1 << 0;
+        const DOWN  = 1 << 1;
+        const LEFT  = 1 << 2;
         const RIGHT = 1 << 3;
-        const OK = 1 << 4;
-        const BACK = 1 << 5;
+        const OK    = 1 << 4;
+        const BACK  = 1 << 5;
         const PAUSE = 1 << 6;
     }
 }
@@ -39,13 +42,18 @@ impl<'a> Frame<'a> {
 }
 
 pub trait Platform {
-    fn init(preferred_width: u16, preferred_height: u16) -> Self where Self: Sized;
+    fn init(preferred_width: u16, preferred_height: u16) -> Self
+    where
+        Self: Sized;
 
     fn should_run(&self) -> bool;
 
     fn time_msec(&self) -> u64;
 
-    fn start_frame(&mut self) -> GenericFrame<'_, Self> where Self: Sized {
+    fn start_frame(&mut self) -> GenericFrame<'_, Self>
+    where
+        Self: Sized,
+    {
         GenericFrame::<'_, Self> {
             lines: vec![],
             platform: self,

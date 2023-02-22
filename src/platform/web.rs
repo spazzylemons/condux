@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc};
 
-use super::{Controls, Buttons, Line, Platform};
+use super::{Buttons, Controls, Line, Platform};
 
 use wasm_bindgen::prelude::*;
 
@@ -41,15 +41,7 @@ static KEYBOARD_MAPPING: [&str; 7] = [
     "Escape",
 ];
 
-static BUTTON_MAPPING: [i32; 7] = [
-    12,
-    13,
-    14,
-    15,
-    1,
-    0,
-    9,
-];
+static BUTTON_MAPPING: [i32; 7] = [12, 13, 14, 15, 1, 0, 9];
 
 fn get_keycode_bitmask(keycode: &str) -> Buttons {
     for (i, k) in KEYBOARD_MAPPING.iter().enumerate() {
@@ -67,7 +59,8 @@ impl Platform for WebPlatform {
         // get document
         let document = window.document().unwrap();
         // get canvas element
-        let canvas = document.get_element_by_id("canvas")
+        let canvas = document
+            .get_element_by_id("canvas")
             .unwrap()
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .unwrap();
@@ -75,7 +68,8 @@ impl Platform for WebPlatform {
         canvas.set_width(preferred_width.into());
         canvas.set_height(preferred_height.into());
         // get the canvas context
-        let ctx = canvas.get_context("2d")
+        let ctx = canvas
+            .get_context("2d")
             .unwrap()
             .unwrap()
             .dyn_into::<web_sys::CanvasRenderingContext2d>()
@@ -90,19 +84,25 @@ impl Platform for WebPlatform {
         let keyboard_buttons = Rc::new(Cell::new(Buttons::empty()));
         // create keydown listener
         let keyboard_buttons_clone = keyboard_buttons.clone();
-        let key_down = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
-            let new_val = keyboard_buttons_clone.get() | get_keycode_bitmask(&event.key());
-            keyboard_buttons_clone.set(new_val);
-        });
+        let key_down =
+            Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
+                let new_val = keyboard_buttons_clone.get() | get_keycode_bitmask(&event.key());
+                keyboard_buttons_clone.set(new_val);
+            });
         // create keyup listener
         let keyboard_buttons_clone = keyboard_buttons.clone();
-        let key_up = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
-            let new_val = keyboard_buttons_clone.get() & !get_keycode_bitmask(&event.key());
-            keyboard_buttons_clone.set(new_val);
-        });
+        let key_up =
+            Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
+                let new_val = keyboard_buttons_clone.get() & !get_keycode_bitmask(&event.key());
+                keyboard_buttons_clone.set(new_val);
+            });
         // register listeners
-        window.add_event_listener_with_callback("keydown", key_down.as_ref().unchecked_ref()).unwrap();
-        window.add_event_listener_with_callback("keyup", key_up.as_ref().unchecked_ref()).unwrap();
+        window
+            .add_event_listener_with_callback("keydown", key_down.as_ref().unchecked_ref())
+            .unwrap();
+        window
+            .add_event_listener_with_callback("keyup", key_up.as_ref().unchecked_ref())
+            .unwrap();
         // return platform object
         Self {
             keyboard_buttons,
@@ -127,11 +127,18 @@ impl Platform for WebPlatform {
 
     fn end_frame(&mut self, lines: &[Line]) {
         // clear screen with black
-        self.ctx.set_fill_style(&wasm_bindgen::JsValue::from_str("black"));
-        self.ctx.fill_rect(0.0, 0.0, self.canvas.width().into(), self.canvas.height().into());
+        self.ctx
+            .set_fill_style(&wasm_bindgen::JsValue::from_str("black"));
+        self.ctx.fill_rect(
+            0.0,
+            0.0,
+            self.canvas.width().into(),
+            self.canvas.height().into(),
+        );
         // set line style
         self.ctx.set_line_width(1.0);
-        self.ctx.set_stroke_style(&wasm_bindgen::JsValue::from_str("white"));
+        self.ctx
+            .set_stroke_style(&wasm_bindgen::JsValue::from_str("white"));
         for ((x0, y0), (x1, y1)) in lines {
             self.ctx.begin_path();
             // add 0.5 for less blurry text
@@ -142,11 +149,11 @@ impl Platform for WebPlatform {
     }
 
     fn width(&self) -> u16 {
-        self.canvas.width() as u16
+        self.canvas.width() as _
     }
 
     fn height(&self) -> u16 {
-        self.canvas.height() as u16
+        self.canvas.height() as _
     }
 
     fn poll(&mut self) -> Controls {
@@ -164,7 +171,9 @@ impl Platform for WebPlatform {
             }
         }
 
-        self.gamepad_mapping_note.set_attribute("hidden", "").unwrap();
+        self.gamepad_mapping_note
+            .set_attribute("hidden", "")
+            .unwrap();
         if let Some(gamepad) = current_gamepad {
             for (i, b) in BUTTON_MAPPING.iter().enumerate() {
                 if is_pressed(&gamepad.buttons().at(*b)) {
@@ -176,7 +185,9 @@ impl Platform for WebPlatform {
             }
         } else {
             if found_gamepad {
-                self.gamepad_mapping_note.remove_attribute("hidden").unwrap();
+                self.gamepad_mapping_note
+                    .remove_attribute("hidden")
+                    .unwrap();
             }
 
             if buttons.contains(Buttons::LEFT) {

@@ -1,6 +1,13 @@
 use std::cell::Cell;
 
-use crate::{linalg::{Quat, Mtx, Vector, Length}, spline::Spline, octree::Octree, timing::TICK_DELTA, render::Mesh, platform::{Controls, Buttons}};
+use crate::{
+    linalg::{Length, Mtx, Quat, Vector},
+    octree::Octree,
+    platform::{Buttons, Controls},
+    render::Mesh,
+    spline::Spline,
+    timing::TICK_DELTA,
+};
 
 const GRAVITY_APPROACH_SPEED: f32 = 5.0;
 const GRAVITY_STRENGTH: f32 = 15.0;
@@ -57,7 +64,8 @@ impl<'a> Vehicle<'a> {
     fn handle_steering(&mut self) {
         let steering = self.controller.steering();
         // local rotate for steering
-        let steering_rotation = Quat::axis_angle(&Vector::Y_AXIS, -steering * self.ty.handling * TICK_DELTA);
+        let steering_rotation =
+            Quat::axis_angle(&Vector::Y_AXIS, -steering * self.ty.handling * TICK_DELTA);
         self.rotation = steering_rotation * self.rotation;
         // smooth steering visual
         self.steering = steering * STEERING_APPROACH_SPEED * TICK_DELTA
@@ -81,7 +89,8 @@ impl<'a> Vehicle<'a> {
             without.approach(anti_drift, &f)
         } else {
             without.approach(anti_drift, &b)
-        }.normalized();
+        }
+        .normalized();
         *without = v * length;
     }
 
@@ -114,7 +123,11 @@ impl<'a> Vehicle<'a> {
             if height <= 0.0 && height > -Self::COLLISION_DEPTH {
                 self.velocity = self.velocity_without_gravity();
                 // collided with floor, apply some friction
-                let with_friction = self.velocity - self.velocity.normalized() * FRICTION_COEFFICIENT * GRAVITY_STRENGTH * TICK_DELTA;
+                let with_friction = self.velocity
+                    - self.velocity.normalized()
+                        * FRICTION_COEFFICIENT
+                        * GRAVITY_STRENGTH
+                        * TICK_DELTA;
                 if with_friction.dot(&self.velocity) <= 0.0 {
                     // if dot product is flipped, direction flipped, so set velocity to zero
                     self.velocity = Vector::ZERO;
@@ -146,7 +159,8 @@ impl<'a> Vehicle<'a> {
         // if it is, we're either perfectly aligned or completely flipped
         // TODO handle the latter case
         if alignment.mag_sq() > 0.0 {
-            let rotation_quat = Quat::axis_angle(&alignment, up.signed_angle(&approach_up, &alignment));
+            let rotation_quat =
+                Quat::axis_angle(&alignment, up.signed_angle(&approach_up, &alignment));
             self.rotation *= rotation_quat;
         }
     }

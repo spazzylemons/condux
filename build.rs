@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use gl_generator::{Registry, Api, Profile, Fallbacks, GlobalGenerator};
+use gl_generator::{Api, Fallbacks, GlobalGenerator, Profile, Registry};
 
 fn main() {
     if let Ok(os) = std::env::var("CARGO_CFG_TARGET_OS") {
@@ -13,7 +13,7 @@ fn main() {
                 if arch != "wasm32" {
                     let dest = std::env::var("OUT_DIR").unwrap();
                     let mut file = File::create(Path::new(&dest).join("gl_bindings.rs")).unwrap();
-            
+
                     Registry::new(Api::Gl, (1, 1), Profile::Core, Fallbacks::All, [])
                         .write_bindings(GlobalGenerator, &mut file)
                         .unwrap();

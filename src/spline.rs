@@ -1,6 +1,10 @@
-use std::f32::consts::{TAU, PI};
+use std::f32::consts::{PI, TAU};
 
-use crate::{linalg::{Vector, Length, Mtx}, octree::Octree, assets::Asset};
+use crate::{
+    assets::Asset,
+    linalg::{Length, Mtx, Vector},
+    octree::Octree,
+};
 
 const BAKE_LENGTH_SQ: f32 = 1.0;
 
@@ -58,7 +62,9 @@ impl Spline {
         // fix tilts
         let mut total_tilt = points[0].tilt;
         for i in 0..num_points {
-            let delta = (points[usize::from((i + 1) % num_points)].tilt - points[usize::from(i)].tilt).rem_euclid(TAU);
+            let delta = (points[usize::from((i + 1) % num_points)].tilt
+                - points[usize::from(i)].tilt)
+                .rem_euclid(TAU);
             points[usize::from(i)].tilt = total_tilt;
             if delta <= PI {
                 // move up
@@ -102,7 +108,9 @@ impl Spline {
             spline.bake_recursive(i, 0.0, 1.0, 0);
         }
         // finish off length measurement
-        let final_length = spline.baked[0].point.dist(spline.baked[spline.baked.len() - 1].point);
+        let final_length = spline.baked[0]
+            .point
+            .dist(spline.baked[spline.baked.len() - 1].point);
         spline.length += final_length;
         Some(spline)
     }
@@ -148,7 +156,10 @@ impl Spline {
         if !self.baked.is_empty() {
             self.length += baked.point.dist(self.baked[self.baked.len() - 1].point);
         }
-        self.baked.push(Baked { offset: self.length, ..baked });
+        self.baked.push(Baked {
+            offset: self.length,
+            ..baked
+        });
     }
 
     pub fn bake_recursive(&mut self, index: u8, begin: f32, end: f32, depth: usize) {
@@ -203,11 +214,7 @@ impl Spline {
     fn floor_div(&self, i: isize) -> (isize, &Point) {
         let n = isize::from(self.num_points());
         let d = i / n;
-        let d = if i < 0 && d * i != n {
-            d - 1
-        } else {
-            d
-        };
+        let d = if i < 0 && d * i != n { d - 1 } else { d };
         (d, &self.points[(i - d * n) as usize])
     }
 

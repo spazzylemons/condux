@@ -1,6 +1,11 @@
-use std::{fmt::Write};
+use std::fmt::Write;
 
-use crate::{linalg::{Vector, Mtx}, spline::Spline, assets::Asset, platform::{Frame, Platform}};
+use crate::{
+    assets::Asset,
+    linalg::{Mtx, Vector},
+    platform::{Frame, Platform},
+    spline::Spline,
+};
 
 pub struct Mesh {
     vertices: Vec<Vector>,
@@ -85,7 +90,8 @@ impl Renderer {
         self.glyphs.clear();
         if let Some(mut asset) = Asset::load("font.bin") {
             for _ in 0..95 {
-                self.glyphs.push(Glyph::load(&mut asset).unwrap_or_default());
+                self.glyphs
+                    .push(Glyph::load(&mut asset).unwrap_or_default());
             }
         }
     }
@@ -153,8 +159,20 @@ impl Renderer {
         self.line(l1, r1, frame);
     }
 
-    pub fn writer<'a, 'b, 'c>(&'a self, x: f32, y: f32, scale: f32, frame: &'b mut Frame<'c>) -> RendererWriter<'a, 'b, 'c> {
-        RendererWriter { renderer: self, x, y, scale, frame }
+    pub fn writer<'a, 'b, 'c>(
+        &'a self,
+        x: f32,
+        y: f32,
+        scale: f32,
+        frame: &'b mut Frame<'c>,
+    ) -> RendererWriter<'a, 'b, 'c> {
+        RendererWriter {
+            renderer: self,
+            x,
+            y,
+            scale,
+            frame,
+        }
     }
 }
 
@@ -211,7 +229,13 @@ impl Mesh {
         Some(Self { vertices, lines })
     }
 
-    pub fn render(&self, renderer: &Renderer, translation: Vector, rotation: Mtx, frame: &mut Frame) {
+    pub fn render(
+        &self,
+        renderer: &Renderer,
+        translation: Vector,
+        rotation: Mtx,
+        frame: &mut Frame,
+    ) {
         for (x, y) in &self.lines {
             let a = self.vertices[*x as usize];
             let a = a * rotation + translation;

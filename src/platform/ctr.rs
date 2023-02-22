@@ -1,6 +1,6 @@
 use ctru::prelude::*;
 
-use super::{Buttons, Controls, Platform, Line};
+use super::{Buttons, Controls, Line, Platform};
 
 static KEY_MAPPING: [ctru::services::hid::KeyPad; 7] = [
     ctru::services::hid::KeyPad::KEY_UP,
@@ -20,11 +20,23 @@ mod citro2d_sys {
         pub fn C2D_Init(maxObjects: usize) -> bool;
         pub fn C2D_Fini();
         pub fn C2D_Prepare();
-        pub fn C2D_CreateScreenTarget(screen: ctru_sys::gfxScreen_t, side: ctru_sys::gfx3dSide_t) -> *mut citro3d_sys::C3D_RenderTarget;
+        pub fn C2D_CreateScreenTarget(
+            screen: ctru_sys::gfxScreen_t,
+            side: ctru_sys::gfx3dSide_t,
+        ) -> *mut citro3d_sys::C3D_RenderTarget;
         pub fn C2D_TargetClear(target: *mut citro3d_sys::C3D_RenderTarget, color: u32);
         pub fn C2D_Flush();
         pub fn C2D_SceneSize(width: u32, height: u32, tilt: bool);
-        pub fn C2D_DrawLine(x0: f32, y0: f32, clr0: u32, x1: f32, y1: f32, clr1: u32, thickness: f32, depth: f32) -> bool;
+        pub fn C2D_DrawLine(
+            x0: f32,
+            y0: f32,
+            clr0: u32,
+            x1: f32,
+            y1: f32,
+            clr1: u32,
+            thickness: f32,
+            depth: f32,
+        ) -> bool;
     }
 
     pub const C2D_DEFAULT_MAX_OBJECTS: u32 = 4096;
@@ -33,7 +45,11 @@ mod citro2d_sys {
     pub unsafe fn C2D_SceneTarget(target: *mut citro3d_sys::C3D_RenderTarget) {
         let target = &*target;
         // the boolean not was not in the original function, but this doesn't seem to work without it???
-        C2D_SceneSize(target.frameBuf.width.into(), target.frameBuf.height.into(), !target.linked);
+        C2D_SceneSize(
+            target.frameBuf.width.into(),
+            target.frameBuf.height.into(),
+            !target.linked,
+        );
     }
 
     #[inline]
@@ -105,9 +121,7 @@ impl Platform for CitroPlatform {
     }
 
     fn time_msec(&self) -> u64 {
-        unsafe {
-            ctru_sys::osGetTime()
-        }
+        unsafe { ctru_sys::osGetTime() }
     }
 
     fn end_frame(&mut self, lines: &[Line]) {
@@ -117,9 +131,14 @@ impl Platform for CitroPlatform {
             citro2d_sys::C2D_SceneBegin(self.target);
             for ((x0, y0), (x1, y1)) in lines {
                 citro2d_sys::C2D_DrawLine(
-                    *x0, *y0, 0xff_ff_ff_ff,
-                    *x1, *y1, 0xff_ff_ff_ff,
-                    1.0, 0.0,
+                    *x0,
+                    *y0,
+                    0xff_ff_ff_ff,
+                    *x1,
+                    *y1,
+                    0xff_ff_ff_ff,
+                    1.0,
+                    0.0,
                 );
             }
             citro3d_sys::C3D_FrameEnd(0);

@@ -1,4 +1,4 @@
-use std::{ops::{Add, Sub, Mul, AddAssign, SubAssign, MulAssign, Div, DivAssign, Neg}};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use crate::timing::TICK_DELTA;
 
@@ -300,9 +300,15 @@ pub struct Mtx {
 
 impl Mtx {
     pub const IDENT: Self = Self {
-        xx: 1.0, xy: 0.0, xz: 0.0,
-        yx: 0.0, yy: 1.0, yz: 0.0,
-        zx: 0.0, zy: 0.0, zz: 1.0,
+        xx: 1.0,
+        xy: 0.0,
+        xz: 0.0,
+        yx: 0.0,
+        yy: 1.0,
+        yz: 0.0,
+        zx: 0.0,
+        zy: 0.0,
+        zz: 1.0,
     };
 
     #[must_use]
@@ -320,9 +326,15 @@ impl Mtx {
         let y = z.cross(&x);
 
         Self {
-            xx: x.x, xy: x.y, xz: x.z,
-            yx: y.x, yy: y.y, yz: y.z,
-            zx: z.x, zy: z.y, zz: z.z,
+            xx: x.x,
+            xy: x.y,
+            xz: x.z,
+            yx: y.x,
+            yy: y.y,
+            yz: y.z,
+            zx: z.x,
+            zy: z.y,
+            zz: z.z,
         }
     }
 
@@ -350,9 +362,15 @@ impl Mtx {
         let yz = a - b;
         let zy = a + b;
         Self {
-            xx, xy, xz,
-            yx, yy, yz,
-            zx, zy, zz,
+            xx,
+            xy,
+            xz,
+            yx,
+            yy,
+            yz,
+            zx,
+            zy,
+            zz,
         }
     }
 }
@@ -378,9 +396,15 @@ impl From<Quat> for Mtx {
         let yz = 2.0 * (a - b);
         let zy = 2.0 * (a + b);
         Self {
-            xx, xy, xz,
-            yx, yy, yz,
-            zx, zy, zz,
+            xx,
+            xy,
+            xz,
+            yx,
+            yy,
+            yz,
+            zx,
+            zy,
+            zz,
         }
     }
 }
@@ -406,9 +430,15 @@ impl MulAssign<Mtx> for Mtx {
         let zy = x * rhs.xy + y * rhs.yy + z * rhs.zy;
         let zz = x * rhs.xz + y * rhs.yz + z * rhs.zz;
         *self = Self {
-            xx, xy, xz,
-            yx, yy, yz,
-            zx, zy, zz,
+            xx,
+            xy,
+            xz,
+            yx,
+            yy,
+            yz,
+            zx,
+            zy,
+            zz,
         }
     }
 }

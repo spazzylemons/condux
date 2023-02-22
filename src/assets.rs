@@ -1,4 +1,4 @@
-use include_dir::{Dir, include_dir};
+use include_dir::{include_dir, Dir};
 
 use crate::linalg::Vector;
 
