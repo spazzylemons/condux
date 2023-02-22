@@ -78,6 +78,7 @@ impl Platform for SdlPlatform {
         let window = video.window("window", preferred_width.into(), preferred_height.into())
             .position_centered()
             .opengl()
+            .resizable()
             .build()
             .unwrap();
         gl::load_with(|s| video.gl_get_proc_address(s).cast());
