@@ -8,6 +8,7 @@ fn main() {
             let dkp = std::env::var("DEVKITPRO").unwrap();
             println!("cargo:rustc-link-search={dkp}/libctru/lib");
             println!("cargo:rustc-link-lib=citro2d");
+            println!("cargo:rustc-link-lib=citro3d");
         } else if let Ok(arch) = std::env::var("CARGO_CFG_TARGET_ARCH") {
             if arch != "wasm32" {
                 let dest = std::env::var("OUT_DIR").unwrap();

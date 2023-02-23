@@ -146,12 +146,15 @@ impl Platform for CitroPlatform {
             citro2d_sys::C2D_TargetClear(self.target, 0xff_00_00_00);
             citro2d_sys::C2D_SceneBegin(self.target);
             for ((x0, y0), (x1, y1)) in lines {
+                // it's not real line drawing as the PICA200 doesn't have a line
+                // primitive option - we add 0.5 to the coordinates to make it
+                // appear less blocky
                 citro2d_sys::C2D_DrawLine(
-                    *x0,
-                    *y0,
+                    *x0 + 0.5,
+                    *y0 + 0.5,
                     0xff_ff_ff_ff,
-                    *x1,
-                    *y1,
+                    *x1 + 0.5,
+                    *y1 + 0.5,
                     0xff_ff_ff_ff,
                     1.0,
                     0.0,
