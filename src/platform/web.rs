@@ -20,6 +20,72 @@ use super::{Buttons, Controls, Line, Platform};
 
 use wasm_bindgen::prelude::*;
 
+struct TouchElement {
+    /// The last read touch average, or None if the last event had no touches.
+    touch_position: Rc<Cell<Option<(f64, f64)>>>,
+    /// The event listener function.
+    _callback: Closure<dyn Fn(web_sys::TouchEvent)>,
+}
+
+impl TouchElement {
+    fn new(id: &str, document: &web_sys::Document) -> Self {
+        // get the element by id
+        let element = document.get_element_by_id(id).unwrap();
+        // create a touch position cell
+        let touch_position = Rc::new(Cell::new(None));
+        // create a callback
+        let touch_position_clone = touch_position.clone();
+        let element_clone = element.clone();
+        let callback =
+            Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                // don't do zoom/scroll/select on this element
+                event.prevent_default();
+                // find touch location
+                let list = event.touches();
+                let length = list.length();
+                if length != 0 {
+                    // get the bounding rectangle
+                    let rect = element_clone.get_bounding_client_rect();
+                    let rect_x = rect.x();
+                    let rect_y = rect.y();
+                    let rect_w_adjust = 2.0 / (rect.width() - 1.0);
+                    let rect_h_adjust = 2.0 / (rect.height() - 1.0);
+                    let mut result_x = 0.0;
+                    let mut result_y = 0.0;
+                    for i in 0..length {
+                        let touch = list.item(i).unwrap();
+                        result_x += f64::from(touch.client_x()) - rect_x;
+                        result_y += f64::from(touch.client_y()) - rect_y;
+                    }
+                    let n = f64::from(length);
+                    result_x /= n;
+                    result_y /= n;
+                    // recenter to [-1, 1]
+                    result_x = (rect_w_adjust * result_x - 1.0).clamp(-1.0, 1.0);
+                    result_y = -(rect_h_adjust * result_y - 1.0).clamp(-1.0, 1.0);
+                    touch_position_clone.set(Some((result_x, result_y)));
+                } else {
+                    touch_position_clone.set(None);
+                }
+            });
+        // add event listeners to element
+        element
+            .add_event_listener_with_callback("touchstart", callback.as_ref().unchecked_ref())
+            .unwrap();
+        element
+            .add_event_listener_with_callback("touchmove", callback.as_ref().unchecked_ref())
+            .unwrap();
+        element
+            .add_event_listener_with_callback("touchend", callback.as_ref().unchecked_ref())
+            .unwrap();
+        // return object
+        Self {
+            touch_position,
+            _callback: callback,
+        }
+    }
+}
+
 pub struct WebPlatform {
     /// buttons pressed by keyboard
     keyboard_buttons: Rc<Cell<Buttons>>,
@@ -31,6 +97,8 @@ pub struct WebPlatform {
     performance: web_sys::Performance,
     /// Navigator to read gamepads from
     navigator: web_sys::Navigator,
+    /// Virtual analog stick
+    virtual_analog: TouchElement,
     /// element to show for gamepad mapping note
     gamepad_mapping_note: web_sys::Element,
     /// Reference to keydown event listener
@@ -126,6 +194,7 @@ impl Platform for WebPlatform {
             ctx,
             performance,
             navigator,
+            virtual_analog: TouchElement::new("virtual-analog", &document),
             gamepad_mapping_note,
 
             _key_down: key_down,
@@ -184,6 +253,16 @@ impl Platform for WebPlatform {
                 if gamepad.mapping() == web_sys::GamepadMappingType::Standard {
                     current_gamepad = Some(gamepad);
                 }
+            }
+        }
+
+        // does not support all buttons, but works for demo
+        if let Some((x, y)) = self.virtual_analog.touch_position.get() {
+            steering = x as _;
+            if y <= -0.5 {
+                buttons |= Buttons::BACK;
+            } else if y >= 0.5 {
+                buttons |= Buttons::OK;
             }
         }
 

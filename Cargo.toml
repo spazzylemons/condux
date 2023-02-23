@@ -17,6 +17,7 @@ version = "0.3.61"
 features = [
     'CanvasRenderingContext2d',
     'Document',
+    'DomRect',
     'Element',
     'EventTarget',
     'Gamepad',
@@ -27,6 +28,9 @@ features = [
     'Navigator',
     'Node',
     'Performance',
+    'Touch',
+    'TouchEvent',
+    'TouchList',
     'Window',
 ]
 
