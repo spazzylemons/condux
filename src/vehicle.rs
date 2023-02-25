@@ -21,8 +21,9 @@ use crate::{
     octree::Octree,
     platform::{Buttons, Controls},
     render::Mesh,
-    spline::{CollisionState, Spline},
+    spline::Spline,
     timing::TICK_DELTA,
+    util::Approach,
 };
 
 const GRAVITY_APPROACH_SPEED: f32 = 5.0;
@@ -40,6 +41,21 @@ pub struct Model {
     pub mesh: Mesh,
 }
 
+pub struct ControllerGuidance {
+    /// The horizontal value.
+    pub horizontal: f32,
+    /// The vehicle position.
+    pub position: Vector,
+    /// The signed magnitude of the vehicle's speed.
+    pub speed: f32,
+    /// The vehicle up vector.
+    pub up: Vector,
+    /// The vehicle forward vector.
+    pub forward: Vector,
+    /// A point somewhat ahead to target.
+    pub target: Vector,
+}
+
 pub struct Vehicle<'a> {
     pub position: Vector,
     pub rotation: Quat,
@@ -52,6 +68,10 @@ pub struct Vehicle<'a> {
     pub respawn_timer: Option<u8>,
     /// The location to respawn to.
     pub respawn_point: Vector,
+    /// The last seen spline horizontal.
+    last_horizontal: f32,
+    /// The last seen spline offset.
+    last_offset: f32,
 }
 
 impl<'a> Vehicle<'a> {
@@ -67,6 +87,35 @@ impl<'a> Vehicle<'a> {
 
     /// This is the number of frames that respawn_timer is set to.
     const RESPAWN_TIMER_INIT: u8 = 60;
+
+    /// How far ahead we look on the spline for guiding AI.
+    const GUIDANCE_LOOKAHEAD: f32 = 4.0;
+
+    pub fn new(pos: Vector, ty: &'a Model, controller: Box<dyn Controller + 'a>) -> Self {
+        Self {
+            position: pos,
+            rotation: Quat::IDENT,
+            velocity: Vector::ZERO,
+            ty,
+            controller,
+            steering: 0.0,
+            respawn_timer: None,
+            respawn_point: pos,
+            last_horizontal: 0.0,
+            last_offset: 0.0,
+        }
+    }
+
+    fn guidance(&self, spline: &Spline) -> ControllerGuidance {
+        ControllerGuidance {
+            horizontal: self.last_horizontal,
+            position: self.position,
+            speed: self.signed_speed(),
+            up: self.up_vector(),
+            forward: self.forward_vector(),
+            target: spline.get_baked(self.last_offset + Self::GUIDANCE_LOOKAHEAD),
+        }
+    }
 
     #[must_use]
     pub fn up_vector(&self) -> Vector {
@@ -110,7 +159,11 @@ impl<'a> Vehicle<'a> {
         if self.respawn_timer.is_some() {
             return;
         }
-        let pedal = self.controller.pedal();
+        let pedal = match self.controller.pedal() {
+            Pedal::Accel => 1.0,
+            Pedal::Brake => -1.0,
+            Pedal::Neutral => 0.0,
+        };
         *without += forward * (pedal * self.ty.acceleration * TICK_DELTA);
     }
 
@@ -123,9 +176,9 @@ impl<'a> Vehicle<'a> {
 
         let anti_drift = self.ty.anti_drift;
         let v = if f.dot(without) > b.dot(without) {
-            without.approach(anti_drift, &f)
+            without.approach(anti_drift, f)
         } else {
-            without.approach(anti_drift, &b)
+            without.approach(anti_drift, b)
         }
         .normalized();
         *without = v * length;
@@ -163,8 +216,14 @@ impl<'a> Vehicle<'a> {
         // only do this if the respawn timer is none
         if self.respawn_timer.is_none() {
             // check collision
-            match spline.get_collision(octree, self.position) {
-                CollisionState::Gravity { up, height } => {
+            if let Some(state) = spline.get_collision(octree, self.position) {
+                let height = state.height;
+                let horizontal = state.horizontal;
+                if horizontal.abs() <= Spline::TRACK_RADIUS {
+                    let up = state.up;
+                    // update guidance info
+                    self.last_offset = state.offset;
+                    self.last_horizontal = horizontal / -Spline::TRACK_RADIUS;
                     if height <= Self::GRAVITY_SNAP {
                         self.velocity = self.velocity_without_gravity();
                         // collided with floor, apply some friction
@@ -190,15 +249,9 @@ impl<'a> Vehicle<'a> {
                     // TODO is this necessary?
                     new_gravity_vector = new_gravity_vector.normalized();
                 }
-
-                CollisionState::InBounds => {
-                    // nothing to do, we're in bounds
-                }
-
-                CollisionState::OutOfBounds => {
-                    // we're out of bounds, we'll signal that we need a respawn
-                    self.respawn_timer = Some(Self::RESPAWN_TIMER_INIT);
-                }
+            } else {
+                // we're out of bounds, we'll signal that we need a respawn
+                self.respawn_timer = Some(Self::RESPAWN_TIMER_INIT);
             }
         }
         new_gravity_vector
@@ -207,7 +260,7 @@ impl<'a> Vehicle<'a> {
     fn update_collision(&mut self, spline: &Spline, octree: &Octree) {
         let new_gravity_vector = self.collide_with_spline(spline, octree);
         let up = self.up_vector();
-        let approach_up = up.approach(GRAVITY_APPROACH_SPEED, &new_gravity_vector);
+        let approach_up = up.approach(GRAVITY_APPROACH_SPEED, new_gravity_vector);
         let alignment = up.cross(&new_gravity_vector).normalized();
         // only perform alignment if our up vector is not parallel to gravity
         // if it is, we're either perfectly aligned or completely flipped
@@ -219,17 +272,47 @@ impl<'a> Vehicle<'a> {
         }
     }
 
+    fn update_controller(&mut self, spline: &Spline) {
+        self.controller.update(&self.guidance(spline));
+    }
+
     pub fn update(&mut self, spline: &Spline, octree: &Octree) {
+        self.update_controller(spline);
         self.update_physics();
         self.update_collision(spline, octree);
         // normalize rotation
         self.rotation = self.rotation.normalized();
     }
+
+    #[must_use]
+    pub fn signed_speed(&self) -> f32 {
+        let v = self.velocity_without_gravity();
+        let f = self.forward_vector();
+        v.mag().copysign(v.dot(&f))
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Pedal {
+    Accel,
+    Brake,
+    Neutral,
+}
+
+impl Default for Pedal {
+    fn default() -> Self {
+        Self::Neutral
+    }
 }
 
 pub trait Controller {
-    fn pedal(&self) -> f32;
+    fn pedal(&self) -> Pedal;
+
     fn steering(&self) -> f32;
+
+    fn update(&mut self, _guidance: &ControllerGuidance) {
+        // default implementation if no update logic needed
+    }
 }
 
 pub struct PlayerController<'a> {
@@ -237,14 +320,14 @@ pub struct PlayerController<'a> {
 }
 
 impl<'a> Controller for PlayerController<'a> {
-    fn pedal(&self) -> f32 {
+    fn pedal(&self) -> Pedal {
         let controls = self.controls.get();
         if controls.buttons.contains(Buttons::BACK) {
-            -1.0
+            Pedal::Brake
         } else if controls.buttons.contains(Buttons::OK) {
-            1.0
+            Pedal::Accel
         } else {
-            0.0
+            Pedal::Neutral
         }
     }
 
@@ -256,11 +339,62 @@ impl<'a> Controller for PlayerController<'a> {
 pub struct EmptyController;
 
 impl Controller for EmptyController {
-    fn pedal(&self) -> f32 {
-        0.0
+    fn pedal(&self) -> Pedal {
+        Pedal::Neutral
     }
 
     fn steering(&self) -> f32 {
         0.0
+    }
+}
+
+#[derive(Default)]
+pub struct AIController {
+    next_pedal: Pedal,
+    next_steering: f32,
+}
+
+impl AIController {
+    const BRAKE_RADIUS: f32 = 0.2;
+    const STEER_STRENGTH: f32 = 5.0;
+    const CAREFUL_ANGLE_RADS: f32 = 0.65;
+    const MIN_SPEED: f32 = 7.0;
+    const STEER_INTERP_STRENGTH: f32 = 10.0;
+}
+
+impl Controller for AIController {
+    fn pedal(&self) -> Pedal {
+        self.next_pedal
+    }
+
+    fn steering(&self) -> f32 {
+        self.next_steering
+    }
+
+    fn update(&mut self, guidance: &ControllerGuidance) {
+        // find vector that we want to be facing
+        let target_direction = (guidance.target - guidance.position).normalized();
+        // find angle between that and where we're actually facing
+        let angle = guidance
+            .forward
+            .signed_angle(&target_direction, &guidance.up);
+        // use this angle to decide steering
+        let new_steering = (-angle * Self::STEER_STRENGTH).clamp(-1.0, 1.0);
+        // interpolate for smoother steering
+        self.next_steering
+            .approach_mut(Self::STEER_INTERP_STRENGTH, new_steering);
+        if guidance.speed < Self::MIN_SPEED {
+            // if moving rather slowly, accelerate so we don't go backwards
+            self.next_pedal = Pedal::Accel;
+        } else if angle.abs() >= Self::CAREFUL_ANGLE_RADS {
+            // if making a tight turn, brake
+            self.next_pedal = Pedal::Brake;
+        } else if guidance.horizontal.abs() >= Self::BRAKE_RADIUS {
+            // if far from center, brake
+            self.next_pedal = Pedal::Brake;
+        } else {
+            // otherwise, accelerate
+            self.next_pedal = Pedal::Accel;
+        }
     }
 }

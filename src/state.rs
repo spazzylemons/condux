@@ -22,6 +22,7 @@ use crate::{
     platform::Frame,
     render::Renderer,
     spline::Spline,
+    util::Approach,
     vehicle::{Controller, Model, Vehicle},
 };
 
@@ -108,16 +109,7 @@ impl<'a> GameState<'a> {
     }
 
     pub fn spawn(&mut self, pos: Vector, ty: &'a Model, controller: Box<dyn Controller + 'a>) {
-        let vehicle = Vehicle {
-            position: pos,
-            rotation: Quat::IDENT,
-            velocity: Vector::ZERO,
-            ty,
-            controller,
-            steering: 0.0,
-            respawn_timer: None,
-            respawn_point: pos,
-        };
+        let vehicle = Vehicle::new(pos, ty, controller);
 
         let prev_pos = vehicle.position;
         let prev_rot = vehicle.rotation;
@@ -155,7 +147,7 @@ impl<'a> GameState<'a> {
             self.camera.pos += translation_global;
             // approach target location
             let target = target_pos(&self.vehicle_states[focus].vehicle);
-            self.camera.pos = self.camera.pos.approach(CAMERA_APPROACH_SPEED, &target);
+            self.camera.pos.approach_mut(CAMERA_APPROACH_SPEED, target);
         }
         self.camera.look_at(&self.vehicle_states[focus].vehicle);
     }
@@ -291,13 +283,7 @@ impl<'a> GameState<'a> {
 
         if ui_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[ui_focus].vehicle;
-            let v = vehicle.velocity_without_gravity();
-            let forward = vehicle.forward_vector();
-            let mut speed = v.mag();
-            // if moving opposite where we're facing, flip reported speed
-            if v.dot(&forward) < 0.0 {
-                speed *= -1.0;
-            }
+            let speed = vehicle.signed_speed();
             render_write!(self.renderer, 6.0, 18.0, 2.0, frame, "SPEED {:.2}", speed);
         }
     }

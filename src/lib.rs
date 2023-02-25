@@ -18,6 +18,7 @@
 
 use ouroboros::self_referencing;
 
+use vehicle::AIController;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -30,6 +31,7 @@ mod render;
 mod spline;
 mod state;
 mod timing;
+mod util;
 mod vehicle;
 
 use std::cell::Cell;
@@ -46,7 +48,7 @@ use crate::{
     spline::Spline,
     state::GameState,
     timing::Timer,
-    vehicle::{EmptyController, Model, PlayerController},
+    vehicle::{Model, PlayerController},
 };
 
 #[self_referencing]
@@ -103,11 +105,11 @@ impl Game {
                 state.spawn(spawn, model, Box::new(PlayerController { controls }));
                 // spawn some other vehicles
                 let spawn = state.spline.get_baked(5.0);
-                state.spawn(spawn, model, Box::new(EmptyController));
+                state.spawn(spawn, model, Box::new(AIController::default()));
                 let spawn = state.spline.get_baked(10.0);
-                state.spawn(spawn, model, Box::new(EmptyController));
+                state.spawn(spawn, model, Box::new(AIController::default()));
                 let spawn = state.spline.get_baked(15.0);
-                state.spawn(spawn, model, Box::new(EmptyController));
+                state.spawn(spawn, model, Box::new(AIController::default()));
                 // set camera behind player
                 state.teleport_camera(0);
                 // return state object

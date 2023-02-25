@@ -16,8 +16,6 @@
 
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use crate::timing::TICK_DELTA;
-
 /// Mixin that provides all length-related methods for both Vector and Quat.
 pub trait Length: Sized + Sub<Self, Output = Self> + DivAssign<f32> {
     #[must_use]
@@ -95,14 +93,6 @@ impl Vector {
             self.z * other.x - other.z * self.x,
             self.x * other.y - other.x * self.y,
         )
-    }
-
-    #[must_use]
-    pub fn approach(mut self, strength: f32, to: &Self) -> Self {
-        let strength = strength * TICK_DELTA;
-        self /= 1.0 + strength;
-        self += *to * strength;
-        self
     }
 
     #[must_use]

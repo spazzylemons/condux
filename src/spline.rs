@@ -52,13 +52,15 @@ pub struct Spline {
     pub length: f32,
 }
 
-pub enum CollisionState {
-    /// The vehicle is above (or slightly below) the spline, and gravity should be applied.
-    Gravity { up: Vector, height: f32 },
-    /// The vehicle is close enough to the spline that it is considered in bounds.
-    InBounds,
-    /// The vehicle is considered out of bounds.
-    OutOfBounds,
+pub struct CollisionState {
+    /// The up vector.
+    pub up: Vector,
+    /// The height above (or slightly) below the spline.
+    pub height: f32,
+    /// The horizontal offset on the spline.
+    pub horizontal: f32,
+    /// The offset of the closest point.
+    pub offset: f32,
 }
 
 impl Spline {
@@ -293,28 +295,32 @@ impl Spline {
     }
 
     #[must_use]
-    pub fn get_collision(&self, octree: &Octree, pos: Vector) -> CollisionState {
+    pub fn get_collision(&self, octree: &Octree, pos: Vector) -> Option<CollisionState> {
         let offset = if let Some(offset) = octree.find_closest_offset(self, pos) {
             offset
         } else {
-            return CollisionState::OutOfBounds;
+            return None;
         };
         let point = self.get_baked(offset);
         let (up, right) = self.get_up_right(offset);
         let d = pos - point;
-        let radius = right.dot(&d).abs();
+        let horizontal = right.dot(&d);
+        let radius = horizontal.abs();
         if radius > Self::BOUNDS_RADIUS {
             // bounds radius check
-            CollisionState::OutOfBounds
+            None
         } else {
             let height = up.dot(&d);
-            if !(-Vehicle::COLLISION_DEPTH..=Vehicle::MAX_GRAVITY_HEIGHT).contains(&height) {
-                // collision height check
-                CollisionState::OutOfBounds
-            } else if radius <= Self::TRACK_RADIUS {
-                CollisionState::Gravity { up, height }
+            // collision height check
+            if (-Vehicle::COLLISION_DEPTH..=Vehicle::MAX_GRAVITY_HEIGHT).contains(&height) {
+                Some(CollisionState {
+                    up,
+                    height,
+                    horizontal,
+                    offset,
+                })
             } else {
-                CollisionState::InBounds
+                None
             }
         }
     }
