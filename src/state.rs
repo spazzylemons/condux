@@ -38,11 +38,6 @@ struct VehicleState<'a> {
     prev_steering: f32,
 }
 
-fn target_pos(vehicle: &Vehicle) -> Vector {
-    let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
-    vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
-}
-
 impl<'a> VehicleState<'a> {
     fn interpolate(&self, interp: f32) -> (Vector, Mtx) {
         let pos = (self.vehicle.position * interp) + (self.prev_pos * (1.0 - interp));
@@ -85,6 +80,8 @@ pub struct GameState<'a> {
     prev_camera: CameraState,
 
     pub renderer: Renderer,
+
+    pub camera_focus: usize,
 }
 
 // (0, sin(PI / -8), cos(PI / -8))
@@ -97,7 +94,7 @@ fn adjust_normal(up: Vector, normal: Vector) -> Vector {
 
 impl<'a> GameState<'a> {
     #[must_use]
-    pub fn new(spline: Spline, octree: Octree, renderer: Renderer) -> Self {
+    pub fn new(spline: Spline, octree: Octree, renderer: Renderer, camera_focus: usize) -> Self {
         Self {
             vehicle_states: vec![],
             spline,
@@ -105,6 +102,7 @@ impl<'a> GameState<'a> {
             camera: CameraState::default(),
             prev_camera: CameraState::default(),
             renderer,
+            camera_focus,
         }
     }
 
@@ -124,47 +122,61 @@ impl<'a> GameState<'a> {
         self.vehicle_states.push(vehicle_state);
     }
 
-    fn update_camera_pos(&mut self, focus: usize) {
-        if focus >= self.vehicle_states.len() {
+    fn focused_vehicle(&self) -> &Vehicle {
+        &self.vehicle_states[self.camera_focus].vehicle
+    }
+
+    fn update_camera_pos(&mut self) {
+        if self.camera_focus >= self.vehicle_states.len() {
             return;
         }
 
         self.prev_camera = self.camera.clone();
         // only do this if the vehicle won't respawn
         // this lets us see the vehicle fall
-        if self.vehicle_states[focus].vehicle.respawn_timer.is_none() {
+        if self.focused_vehicle().respawn_timer.is_none() {
             // set ourselves to the proper distance
             let tmp = Vector::Z_AXIS
-                * (self.vehicle_states[focus]
+                * (self.vehicle_states[self.camera_focus]
                     .vehicle
                     .position
                     .dist(self.camera.pos)
                     - CAMERA_FOLLOW_DISTANCE);
-            let delta = self.camera.pos - self.vehicle_states[focus].vehicle.position;
-            let up = self.vehicle_states[focus].vehicle.up_vector();
+            let delta = self.camera.pos - self.focused_vehicle().position;
+            let up = self.focused_vehicle().up_vector();
             let camera_mtx = Mtx::looking_at(delta, up);
             let translation_global = camera_mtx * tmp;
             self.camera.pos += translation_global;
             // approach target location
-            let target = target_pos(&self.vehicle_states[focus].vehicle);
+            let target = self.target_pos();
             self.camera.pos.approach_mut(CAMERA_APPROACH_SPEED, target);
         }
-        self.camera.look_at(&self.vehicle_states[focus].vehicle);
+        self.look_at_vehicle();
     }
 
-    pub fn teleport_camera(&mut self, focus: usize) {
-        if focus >= self.vehicle_states.len() {
+    fn target_pos(&self) -> Vector {
+        let vehicle = self.focused_vehicle();
+        let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
+        vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
+    }
+
+    fn look_at_vehicle(&mut self) {
+        self.camera
+            .look_at(&self.vehicle_states[self.camera_focus].vehicle);
+    }
+
+    pub fn teleport_camera(&mut self) {
+        if self.camera_focus >= self.vehicle_states.len() {
             return;
         }
 
-        let vehicle = &self.vehicle_states[focus].vehicle;
-        self.camera.pos = target_pos(vehicle);
-        self.camera.look_at(vehicle);
+        self.camera.pos = self.target_pos();
+        self.look_at_vehicle();
         // update prev camera as well
         self.prev_camera = self.camera.clone();
     }
 
-    pub fn update(&mut self, focus: usize) {
+    pub fn update(&mut self) {
         // check all vehicles that may need to respawn
         let mut need_to_reset_camera = false;
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
@@ -185,7 +197,7 @@ impl<'a> GameState<'a> {
                     // clear respawn timer
                     state.vehicle.respawn_timer = None;
                     // if this is the focused vehicle, reset the camera as well
-                    if i == focus {
+                    if i == self.camera_focus {
                         need_to_reset_camera = true;
                     }
                 } else {
@@ -195,7 +207,7 @@ impl<'a> GameState<'a> {
             }
         }
         if need_to_reset_camera {
-            self.teleport_camera(focus);
+            self.teleport_camera();
         }
 
         // run physics on all vehicles
@@ -257,10 +269,10 @@ impl<'a> GameState<'a> {
             }
         }
         // now, run camera logic
-        self.update_camera_pos(focus);
+        self.update_camera_pos();
     }
 
-    pub fn render(&mut self, ui_focus: usize, interp: f32, frame: &mut Frame) {
+    pub fn render(&mut self, interp: f32, frame: &mut Frame) {
         let interp_camera_pos =
             (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
         let interp_camera_target =
@@ -281,8 +293,8 @@ impl<'a> GameState<'a> {
 
         self.renderer.render_spline(frame);
 
-        if ui_focus < self.vehicle_states.len() {
-            let vehicle = &self.vehicle_states[ui_focus].vehicle;
+        if self.camera_focus < self.vehicle_states.len() {
+            let vehicle = self.focused_vehicle();
             let speed = vehicle.signed_speed();
             render_write!(self.renderer, 6.0, 18.0, 2.0, frame, "SPEED {:.2}", speed);
         }

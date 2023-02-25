@@ -99,7 +99,7 @@ impl Game {
             controls,
             model,
             state_builder: move |controls, model| {
-                let mut state = GameState::new(spline, octree, renderer);
+                let mut state = GameState::new(spline, octree, renderer, 0);
                 // spawn player
                 let spawn = state.spline.get_baked(0.0);
                 state.spawn(spawn, model, Box::new(PlayerController { controls }));
@@ -111,7 +111,7 @@ impl Game {
                 let spawn = state.spline.get_baked(15.0);
                 state.spawn(spawn, model, Box::new(AIController::default()));
                 // set camera behind player
-                state.teleport_camera(0);
+                state.teleport_camera();
                 // return state object
                 state
             },
@@ -145,12 +145,12 @@ impl Game {
         let (mut i, interp) = self.with_mut(|fields| fields.timer.frame_ticks(fields.platform));
         while i > 0 {
             i -= 1;
-            self.with_state_mut(|state| state.update(0));
+            self.with_state_mut(|state| state.update());
         }
         // render frame
         self.with_mut(|fields| {
             let mut frame = fields.platform.start_frame();
-            fields.state.render(0, interp, &mut frame);
+            fields.state.render(interp, &mut frame);
             frame.finish();
         });
     }
