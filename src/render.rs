@@ -75,6 +75,7 @@ pub struct Renderer {
     camera_pos: Vector,
     camera_mtx: Mtx,
     spline_points: Vec<(Vector, Vector)>,
+    spline_walls: Vec<(Vector, Vector)>,
     glyphs: Vec<Glyph>,
 }
 
@@ -93,6 +94,7 @@ impl Renderer {
             camera_pos: Vector::ZERO,
             camera_mtx: Mtx::IDENT,
             spline_points: vec![],
+            spline_walls: vec![],
             glyphs: vec![],
         }
     }
@@ -147,32 +149,53 @@ impl Renderer {
         let mut d = 0.0;
         while d < spline.length {
             let p = spline.get_baked(d);
-            let (_, r) = spline.get_up_right(d);
+            let (mut u, r) = spline.get_up_right(d);
             let r = r * Spline::TRACK_RADIUS;
-            self.spline_points.push((p - r, p + r));
+            let mut pl = p - r;
+            let mut pr = p + r;
+            self.spline_points.push((pl, pr));
+            u *= Spline::WALL_HEIGHT;
+            pl += u;
+            pr += u;
+            self.spline_walls.push((pl, pr));
             d += 1.0;
         }
     }
 
-    pub fn render_spline(&self, frame: &mut Frame) {
+    fn render_spline_segment(&self, frame: &mut Frame, index: usize, walls: bool) {
+        // avoid modulus for efficiency
+        let mut other_index = index + 1;
+        if other_index == self.spline_points.len() {
+            other_index = 0;
+        }
+        // get floor points
+        let (l1, r1) = self.spline_points[index];
+        let (l2, r2) = self.spline_points[other_index];
+        self.line(l1, l2, frame);
+        self.line(r1, r2, frame);
+        self.line(l1, r1, frame);
+        if walls {
+            // get wall points
+            let (wl1, wr1) = self.spline_walls[index];
+            let (wl2, wr2) = self.spline_walls[other_index];
+            self.line(l1, wl1, frame);
+            self.line(r1, wr1, frame);
+            self.line(wl1, wl2, frame);
+            self.line(wr1, wr2, frame);
+        }
+    }
+
+    pub fn render_spline(&self, frame: &mut Frame, walls: bool) {
         // in case no points loaded, don't draw
         if self.spline_points.is_empty() {
             return;
         }
 
-        for i in 0..self.spline_points.len() - 1 {
-            let (l1, r1) = self.spline_points[i];
-            let (l2, r2) = self.spline_points[i + 1];
-            self.line(l1, l2, frame);
-            self.line(r1, r2, frame);
-            self.line(l1, r1, frame);
+        // TODO precalculate all lines and render in a tight loop
+        // when the wall code is more solidified
+        for i in 0..self.spline_points.len() {
+            self.render_spline_segment(frame, i, walls);
         }
-        // close the loop
-        let (l1, r1) = self.spline_points[self.spline_points.len() - 1];
-        let (l2, r2) = self.spline_points[0];
-        self.line(l1, l2, frame);
-        self.line(r1, r2, frame);
-        self.line(l1, r1, frame);
     }
 
     pub fn writer<'a, 'b, 'c>(

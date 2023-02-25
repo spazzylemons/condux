@@ -211,7 +211,7 @@ impl<'a> Vehicle<'a> {
         self.position += self.velocity * TICK_DELTA;
     }
 
-    fn collide_with_spline(&mut self, spline: &Spline, octree: &Octree) -> Vector {
+    fn collide_with_spline(&mut self, spline: &Spline, octree: &Octree, walls: bool) -> Vector {
         let mut new_gravity_vector = Vector::Y_AXIS;
         // only do this if the respawn timer is none
         if self.respawn_timer.is_none() {
@@ -220,6 +220,20 @@ impl<'a> Vehicle<'a> {
                 let height = state.height;
                 let horizontal = state.horizontal;
                 if horizontal.abs() <= Spline::TRACK_RADIUS {
+                    if walls {
+                        // account for vehicle radius with wall collision
+                        let adjusted_radius = Spline::TRACK_RADIUS - Self::RADIUS;
+                        if horizontal.abs() > Spline::TRACK_RADIUS - Self::RADIUS
+                            && height <= Spline::WALL_HEIGHT
+                        {
+                            let right = state.right;
+                            self.position -=
+                                right * (horizontal.abs() - adjusted_radius).copysign(horizontal);
+                            // remove velocity that's parallel to the wall
+                            self.velocity = self.velocity_without_gravity();
+                            self.velocity -= right * self.velocity.dot(&right);
+                        }
+                    }
                     let up = state.up;
                     // update guidance info
                     self.last_offset = state.offset;
@@ -257,8 +271,8 @@ impl<'a> Vehicle<'a> {
         new_gravity_vector
     }
 
-    fn update_collision(&mut self, spline: &Spline, octree: &Octree) {
-        let new_gravity_vector = self.collide_with_spline(spline, octree);
+    fn update_collision(&mut self, spline: &Spline, octree: &Octree, walls: bool) {
+        let new_gravity_vector = self.collide_with_spline(spline, octree, walls);
         let up = self.up_vector();
         let approach_up = up.approach(GRAVITY_APPROACH_SPEED, new_gravity_vector);
         let alignment = up.cross(&new_gravity_vector).normalized();
@@ -276,10 +290,10 @@ impl<'a> Vehicle<'a> {
         self.controller.update(&self.guidance(spline));
     }
 
-    pub fn update(&mut self, spline: &Spline, octree: &Octree) {
+    pub fn update(&mut self, spline: &Spline, octree: &Octree, walls: bool) {
         self.update_controller(spline);
         self.update_physics();
-        self.update_collision(spline, octree);
+        self.update_collision(spline, octree, walls);
         // normalize rotation
         self.rotation = self.rotation.normalized();
     }

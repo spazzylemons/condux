@@ -59,6 +59,8 @@ struct Game {
     timer: Timer,
     /// The state of the controls.
     controls: Cell<Controls>,
+    /// The buttons that have been pressed this frame.
+    pressed: Buttons,
     /// The model of the vehicle.
     model: Model,
     /// The game state.
@@ -97,6 +99,7 @@ impl Game {
             platform,
             timer,
             controls,
+            pressed: Buttons::empty(),
             model,
             state_builder: move |controls, model| {
                 let mut state = GameState::new(spline, octree, renderer, 0);
@@ -121,14 +124,10 @@ impl Game {
 
     fn should_run(&self) -> bool {
         self.borrow_platform().should_run()
-            && !self
-                .borrow_controls()
-                .get()
-                .buttons
-                .contains(Buttons::PAUSE)
     }
 
     fn update_controls(&mut self) {
+        let old_controls = self.borrow_controls().get().buttons;
         // get controls
         let mut new_controls = self.with_platform_mut(|platform| platform.poll());
         // apply deadzone
@@ -137,10 +136,16 @@ impl Game {
         }
         // set controls
         self.borrow_controls().set(new_controls);
+        // determine which buttons were pressed
+        self.with_pressed_mut(|pressed| *pressed = new_controls.buttons & !old_controls);
     }
 
     fn iteration(&mut self) {
         self.update_controls();
+        // if pause pressed, toggle walls
+        if self.borrow_pressed().contains(Buttons::PAUSE) {
+            self.with_state_mut(|state| state.walls = !state.walls);
+        }
         // update game state
         let (mut i, interp) = self.with_mut(|fields| fields.timer.frame_ticks(fields.platform));
         while i > 0 {

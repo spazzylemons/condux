@@ -55,6 +55,8 @@ pub struct Spline {
 pub struct CollisionState {
     /// The up vector.
     pub up: Vector,
+    /// The right vector.
+    pub right: Vector,
     /// The height above (or slightly) below the spline.
     pub height: f32,
     /// The horizontal offset on the spline.
@@ -68,6 +70,8 @@ impl Spline {
     pub const TRACK_RADIUS: f32 = 2.0;
     /// The extended spline radius for bounds checks.
     pub const BOUNDS_RADIUS: f32 = 5.0;
+    /// The height of the walls on the side.
+    pub const WALL_HEIGHT: f32 = 0.25;
 
     const MAX_BAKE_DEPTH: usize = 5;
 
@@ -315,6 +319,7 @@ impl Spline {
             if (-Vehicle::COLLISION_DEPTH..=Vehicle::MAX_GRAVITY_HEIGHT).contains(&height) {
                 Some(CollisionState {
                     up,
+                    right,
                     height,
                     horizontal,
                     offset,

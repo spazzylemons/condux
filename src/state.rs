@@ -82,6 +82,8 @@ pub struct GameState<'a> {
     pub renderer: Renderer,
 
     pub camera_focus: usize,
+
+    pub walls: bool,
 }
 
 // (0, sin(PI / -8), cos(PI / -8))
@@ -103,6 +105,7 @@ impl<'a> GameState<'a> {
             prev_camera: CameraState::default(),
             renderer,
             camera_focus,
+            walls: false,
         }
     }
 
@@ -221,7 +224,7 @@ impl<'a> GameState<'a> {
             state.prev_pos = state.vehicle.position;
             state.prev_rot = state.vehicle.rotation;
             state.prev_steering = state.vehicle.steering;
-            state.vehicle.update(&self.spline, &self.octree);
+            state.vehicle.update(&self.spline, &self.octree, self.walls);
 
             total_translations.push(Vector::ZERO);
             original_velocity.push(state.vehicle.velocity);
@@ -291,7 +294,7 @@ impl<'a> GameState<'a> {
                 .render(&self.renderer, pos, rot, frame);
         }
 
-        self.renderer.render_spline(frame);
+        self.renderer.render_spline(frame, self.walls);
 
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = self.focused_vehicle();
