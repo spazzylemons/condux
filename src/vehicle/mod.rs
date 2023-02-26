@@ -14,8 +14,6 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::rc::Rc;
-
 use crate::{
     linalg::{Length, Mtx, Quat, Vector},
     octree::Octree,
@@ -25,6 +23,8 @@ use crate::{
     timing::TICK_DELTA,
     util::Approach,
 };
+
+use self::garage::Garage;
 
 pub mod garage;
 
@@ -65,7 +65,7 @@ pub struct Vehicle {
     pub rotation: Quat,
     pub velocity: Vector,
     pub steering: f32,
-    model: Rc<Model>,
+    model_id: u16,
     controller: Box<dyn Controller>,
     /// When containing a value, the vehicle cannot be controlled, does not collide
     /// with the track, and will be respawned when the timer reaches zero.
@@ -95,12 +95,12 @@ impl Vehicle {
     /// How far ahead we look on the spline for guiding AI.
     const GUIDANCE_LOOKAHEAD: f32 = 4.0;
 
-    pub fn new(pos: Vector, model: Rc<Model>, controller: Box<dyn Controller>) -> Self {
+    pub fn new(pos: Vector, model_id: u16, controller: Box<dyn Controller>) -> Self {
         Self {
             position: pos,
             rotation: Quat::IDENT,
             velocity: Vector::ZERO,
-            model,
+            model_id,
             controller,
             steering: 0.0,
             respawn_timer: None,
@@ -144,24 +144,27 @@ impl Vehicle {
         self.velocity - self.gravity()
     }
 
-    fn handle_steering(&mut self) {
+    fn handle_steering(&mut self, model: &Model) {
         // only if we're not going to respawn
         if self.respawn_timer.is_some() {
             return;
         }
         let steering = self.controller.steering();
         // local rotate for steering
-        let steering_rotation = Quat::axis_angle(
-            &Vector::Y_AXIS,
-            -steering * self.model.handling * TICK_DELTA,
-        );
+        let steering_rotation =
+            Quat::axis_angle(&Vector::Y_AXIS, -steering * model.handling * TICK_DELTA);
         self.rotation = steering_rotation * self.rotation;
         // smooth steering visual
         self.steering = steering * STEERING_APPROACH_SPEED * TICK_DELTA
             + self.steering / (1.0 + (STEERING_APPROACH_SPEED * TICK_DELTA));
     }
 
-    fn apply_acceleration_no_speed_cap(&mut self, without: &mut Vector, forward: Vector) {
+    fn apply_acceleration_no_speed_cap(
+        &mut self,
+        model: &Model,
+        without: &mut Vector,
+        forward: Vector,
+    ) {
         // only if we're not going to respawn
         if self.respawn_timer.is_some() {
             return;
@@ -171,17 +174,22 @@ impl Vehicle {
             Pedal::Brake => -1.0,
             Pedal::Neutral => 0.0,
         };
-        *without += forward * (pedal * self.model.acceleration * TICK_DELTA);
+        *without += forward * (pedal * model.acceleration * TICK_DELTA);
     }
 
-    fn approach_aligned_without_gravity(&mut self, forward: Vector, without: &mut Vector) {
+    fn approach_aligned_without_gravity(
+        &mut self,
+        model: &Model,
+        forward: Vector,
+        without: &mut Vector,
+    ) {
         let f = forward.normalized();
         let b = -f;
 
         let length = without.mag();
         *without = without.normalized();
 
-        let anti_drift = self.model.anti_drift;
+        let anti_drift = model.anti_drift;
         let v = if f.dot(without) > b.dot(without) {
             without.approach(anti_drift, f)
         } else {
@@ -191,8 +199,8 @@ impl Vehicle {
         *without = v * length;
     }
 
-    fn update_physics(&mut self) {
-        self.handle_steering();
+    fn update_physics(&mut self, model: &Model) {
+        self.handle_steering(model);
         // precalculate up and forward vectors
         let up = self.up_vector();
         let forward = self.forward_vector();
@@ -201,13 +209,13 @@ impl Vehicle {
         // get amount of gravity being experienced
         let mut gravity = self.gravity();
         let mut without = self.velocity - gravity;
-        self.apply_acceleration_no_speed_cap(&mut without, forward);
+        self.apply_acceleration_no_speed_cap(model, &mut without, forward);
         // speed cap
-        let speed = self.model.speed;
+        let speed = model.speed;
         if without.mag_sq() > speed * speed {
             without = without.normalized() * speed;
         }
-        self.approach_aligned_without_gravity(forward, &mut without);
+        self.approach_aligned_without_gravity(model, forward, &mut without);
         // limit gravity
         if gravity.mag_sq() > GRAVITY_TERMINAL_VELOCITY * GRAVITY_TERMINAL_VELOCITY {
             gravity = gravity.normalized() * GRAVITY_TERMINAL_VELOCITY;
@@ -297,12 +305,21 @@ impl Vehicle {
         self.controller.update(&self.guidance(spline, controls));
     }
 
-    pub fn update(&mut self, spline: &Spline, octree: &Octree, controls: &Controls, walls: bool) {
-        self.update_controller(spline, controls);
-        self.update_physics();
-        self.update_collision(spline, octree, walls);
-        // normalize rotation
-        self.rotation = self.rotation.normalized();
+    pub fn update(
+        &mut self,
+        garage: &Garage,
+        spline: &Spline,
+        octree: &Octree,
+        controls: &Controls,
+        walls: bool,
+    ) {
+        if let Some(model) = garage.get_model(self.model_id) {
+            self.update_controller(spline, controls);
+            self.update_physics(model);
+            self.update_collision(spline, octree, walls);
+            // normalize rotation
+            self.rotation = self.rotation.normalized();
+        }
     }
 
     #[must_use]
@@ -312,8 +329,17 @@ impl Vehicle {
         v.mag().copysign(v.dot(&f))
     }
 
-    pub fn render(&self, renderer: &Renderer, pos: Vector, rot: Mtx, frame: &mut Frame) {
-        self.model.mesh.render(renderer, pos, rot, frame);
+    pub fn render(
+        &self,
+        garage: &Garage,
+        renderer: &Renderer,
+        pos: Vector,
+        rot: Mtx,
+        frame: &mut Frame,
+    ) {
+        if let Some(model) = garage.get_model(self.model_id) {
+            model.mesh.render(renderer, pos, rot, frame);
+        }
     }
 }
 

@@ -21,17 +21,30 @@ use crate::{
     linalg::Vector,
     platform::{Buttons, Controls, Frame},
     render::Renderer,
+    vehicle::garage::Garage,
 };
+
+#[derive(Default)]
+pub struct GlobalGameData {
+    /// The last state of the controls.
+    pub controls: Controls,
+    /// The buttons that have been pressed this frame.
+    pub pressed: Buttons,
+    /// The vehicle models.
+    pub garage: Garage,
+    /// The renderer.
+    pub renderer: Renderer,
+}
 
 /// A game mode.
 pub trait Mode {
     /// Update the state. If a new mode is to be transitioned to, then returns
     /// the new mode to replace this with, which should have the same lifetime.
-    fn tick(&mut self, controls: Controls, pressed: Buttons) -> Option<Box<dyn Mode>>;
+    fn tick(&mut self, data: &GlobalGameData) -> Option<Box<dyn Mode>>;
 
     /// Get the camera to render with.
     fn camera(&self, interp: f32) -> (Vector, Vector, Vector);
 
     /// Render this mode.
-    fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame);
+    fn render(&self, interp: f32, data: &GlobalGameData, frame: &mut Frame);
 }

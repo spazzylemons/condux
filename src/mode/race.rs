@@ -14,8 +14,6 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::rc::Rc;
-
 use crate::{
     linalg::{Length, Mtx, Quat, Vector},
     mode::Mode,
@@ -24,8 +22,10 @@ use crate::{
     render::Renderer,
     spline::Spline,
     util::{Approach, Interpolate},
-    vehicle::{garage::Garage, Controller, Model, Vehicle},
+    vehicle::{garage::Garage, Controller, Vehicle},
 };
+
+use super::GlobalGameData;
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -40,8 +40,8 @@ struct VehicleState {
 }
 
 impl VehicleState {
-    pub fn new(pos: Vector, model: Rc<Model>, controller: Box<dyn Controller>) -> Self {
-        let vehicle = Vehicle::new(pos, model, controller);
+    pub fn new(pos: Vector, model_id: u16, controller: Box<dyn Controller>) -> Self {
+        let vehicle = Vehicle::new(pos, model_id, controller);
 
         let prev_pos = vehicle.position;
         let prev_rot = vehicle.rotation;
@@ -70,9 +70,9 @@ impl VehicleState {
         (pos, rot_quat.into())
     }
 
-    fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame) {
+    fn render(&self, interp: f32, garage: &Garage, renderer: &Renderer, frame: &mut Frame) {
         let (pos, rot) = self.interpolate(interp);
-        self.vehicle.render(renderer, pos, rot, frame);
+        self.vehicle.render(garage, renderer, pos, rot, frame);
     }
 
     /// Returns true if the vehicle was respawned.
@@ -102,11 +102,19 @@ impl VehicleState {
         false
     }
 
-    fn update(&mut self, spline: &Spline, octree: &Octree, controls: &Controls, walls: bool) {
+    fn update(
+        &mut self,
+        garage: &Garage,
+        spline: &Spline,
+        octree: &Octree,
+        controls: &Controls,
+        walls: bool,
+    ) {
         self.prev_pos = self.vehicle.position;
         self.prev_rot = self.vehicle.rotation;
         self.prev_steering = self.vehicle.steering;
-        self.vehicle.update(spline, octree, &controls, walls);
+        self.vehicle
+            .update(garage, spline, octree, &controls, walls);
     }
 }
 
@@ -156,7 +164,6 @@ impl CameraState {
 
 pub struct RaceMode {
     vehicle_states: Vec<VehicleState>,
-    garage: Garage,
 
     pub spline: Spline,
     pub octree: Octree,
@@ -180,11 +187,8 @@ fn adjust_normal(up: Vector, normal: Vector) -> Vector {
 impl RaceMode {
     #[must_use]
     pub fn new(spline: Spline, octree: Octree, camera_focus: usize) -> Self {
-        let mut garage = Garage::default();
-        garage.load_hardcoded();
         Self {
             vehicle_states: vec![],
-            garage,
             spline,
             octree,
             camera: CameraState::default(),
@@ -194,11 +198,9 @@ impl RaceMode {
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, model_name: &str, controller: Box<dyn Controller>) {
-        if let Some(model) = self.garage.get(&model_name) {
-            self.vehicle_states
-                .push(VehicleState::new(pos, model, controller));
-        }
+    pub fn spawn(&mut self, pos: Vector, model_id: u16, controller: Box<dyn Controller>) {
+        self.vehicle_states
+            .push(VehicleState::new(pos, model_id, controller));
     }
 
     fn update_camera_pos(&mut self) {
@@ -224,8 +226,8 @@ impl RaceMode {
 }
 
 impl Mode for RaceMode {
-    fn tick(&mut self, controls: Controls, pressed: Buttons) -> Option<Box<dyn Mode>> {
-        if pressed.contains(Buttons::PAUSE) {
+    fn tick(&mut self, data: &GlobalGameData) -> Option<Box<dyn Mode>> {
+        if data.pressed.contains(Buttons::PAUSE) {
             self.walls = !self.walls;
         }
         // check all vehicles that may need to respawn
@@ -247,7 +249,13 @@ impl Mode for RaceMode {
         self.octree.reset_vehicles();
 
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
-            state.update(&self.spline, &self.octree, &controls, self.walls);
+            state.update(
+                &data.garage,
+                &self.spline,
+                &self.octree,
+                &data.controls,
+                self.walls,
+            );
 
             total_translations.push(Vector::ZERO);
             original_velocity.push(state.vehicle.velocity);
@@ -311,17 +319,18 @@ impl Mode for RaceMode {
         (interp_camera_pos, interp_camera_target, interp_camera_up)
     }
 
-    fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame) {
+    fn render(&self, interp: f32, data: &GlobalGameData, frame: &mut Frame) {
         for state in &self.vehicle_states {
-            state.render(interp, renderer, frame);
+            state.render(interp, &data.garage, &data.renderer, frame);
         }
 
-        self.spline.render(renderer, frame, self.walls);
+        self.spline.render(&data.renderer, frame, self.walls);
 
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[self.camera_focus].vehicle;
             let speed = vehicle.signed_speed();
-            renderer.write(6.0, 18.0, 2.0, frame, &format!("SPEED {:.2}", speed));
+            data.renderer
+                .write(6.0, 18.0, 2.0, frame, &format!("SPEED {:.2}", speed));
         }
     }
 }

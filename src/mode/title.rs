@@ -18,33 +18,33 @@ use crate::{
     assets::Asset,
     linalg::Vector,
     octree::Octree,
-    platform::{Buttons, Controls, Frame},
-    render::Renderer,
+    platform::Frame,
     spline::Spline,
     vehicle::{AIController, PlayerController},
 };
 
-use super::{race::RaceMode, Mode};
+use super::{race::RaceMode, GlobalGameData, Mode};
 
 pub struct TitleMode;
 
 impl Mode for TitleMode {
-    fn tick(&mut self, _controls: Controls, pressed: Buttons) -> Option<Box<dyn Mode>> {
-        if !pressed.is_empty() {
+    fn tick(&mut self, data: &GlobalGameData) -> Option<Box<dyn Mode>> {
+        if !data.pressed.is_empty() {
             // transition to race
             let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
             let octree = Octree::new(&spline);
             let mut mode = Box::new(RaceMode::new(spline, octree, 0));
             // spawn player
             let spawn = mode.spline.get_baked(0.0);
-            mode.spawn(spawn, "default", Box::new(PlayerController::default()));
+            let model = data.garage.get_id("default").unwrap();
+            mode.spawn(spawn, model, Box::new(PlayerController::default()));
             // spawn some other vehicles
             let spawn = mode.spline.get_baked(5.0);
-            mode.spawn(spawn, "default", Box::new(AIController::default()));
+            mode.spawn(spawn, model, Box::new(AIController::default()));
             let spawn = mode.spline.get_baked(10.0);
-            mode.spawn(spawn, "default", Box::new(AIController::default()));
+            mode.spawn(spawn, model, Box::new(AIController::default()));
             let spawn = mode.spline.get_baked(15.0);
-            mode.spawn(spawn, "default", Box::new(AIController::default()));
+            mode.spawn(spawn, model, Box::new(AIController::default()));
             // set camera behind player
             mode.teleport_camera();
             // send mode transition
@@ -58,8 +58,9 @@ impl Mode for TitleMode {
         (Vector::ZERO, Vector::Z_AXIS, Vector::Y_AXIS)
     }
 
-    fn render(&self, _interp: f32, renderer: &Renderer, frame: &mut Frame) {
+    fn render(&self, _interp: f32, data: &GlobalGameData, frame: &mut Frame) {
         // draw some text
-        renderer.write(4.0, 30.0, 4.0, frame, "press any button to start");
+        data.renderer
+            .write(4.0, 30.0, 4.0, frame, "press any button to start");
     }
 }

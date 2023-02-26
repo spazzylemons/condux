@@ -30,6 +30,7 @@ where
 pub type Frame<'a> = GenericFrame<'a, Impl>;
 
 bitflags! {
+    #[derive(Default)]
     pub struct Buttons: u8 {
         const UP    = 1 << 0;
         const DOWN  = 1 << 1;
@@ -41,7 +42,7 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Controls {
     pub buttons: Buttons,
     pub steering: f32,

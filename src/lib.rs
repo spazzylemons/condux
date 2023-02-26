@@ -16,7 +16,7 @@
 
 #![cfg_attr(target_os = "horizon", feature(allocator_api))]
 
-use mode::{title::TitleMode, Mode};
+use mode::{title::TitleMode, GlobalGameData, Mode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -32,39 +32,37 @@ mod timing;
 mod util;
 mod vehicle;
 
-use platform::{Buttons, Controls, Impl, Platform};
+use platform::{Buttons, Impl, Platform};
 
 const DEADZONE: f32 = 0.03;
 
-use crate::{render::Renderer, timing::Timer};
+use crate::timing::Timer;
 
 struct Game {
     /// Platform-specific interface.
     platform: Impl,
     /// The game timer.
     timer: Timer,
-    /// The last pressed buttons.
-    last_buttons: Buttons,
-    /// The line renderer.
-    renderer: Renderer,
     /// The game mode.
     mode: Box<dyn Mode>,
+    /// The global game data.
+    data: GlobalGameData,
 }
 
 impl Game {
     #[must_use]
     fn init() -> Self {
         let platform = platform::Impl::init(640, 480);
-        let mut renderer = Renderer::new();
-        renderer.load_glyphs();
+        let mut data = GlobalGameData::default();
+        data.garage.load_hardcoded();
+        data.renderer.load_glyphs();
         let timer = Timer::new(&platform);
 
         Self {
             platform,
             timer,
-            last_buttons: Buttons::empty(),
-            renderer,
             mode: Box::new(TitleMode),
+            data,
         }
     }
 
@@ -72,7 +70,7 @@ impl Game {
         self.platform.should_run()
     }
 
-    fn update_controls(&mut self) -> (Controls, Buttons) {
+    fn update_controls(&mut self) {
         // get controls
         let mut controls = self.platform.poll();
         // apply deadzone
@@ -80,28 +78,27 @@ impl Game {
             controls.steering = 0.0;
         }
         // determine which buttons were pressed
-        let pressed = controls.buttons & !self.last_buttons;
-        self.last_buttons = controls.buttons;
-        (controls, pressed)
+        self.data.pressed = controls.buttons & !self.data.controls.buttons;
+        self.data.controls = controls;
     }
 
     fn iteration(&mut self) {
-        let (controls, mut pressed) = self.update_controls();
+        self.update_controls();
         // update game state
         let (mut i, interp) = self.timer.frame_ticks(&self.platform);
         while i > 0 {
             i -= 1;
-            if let Some(new_mode) = self.mode.tick(controls, pressed) {
+            if let Some(new_mode) = self.mode.tick(&self.data) {
                 self.mode = new_mode;
-                // clear pressed buttons to avoid triggering stuff in new mode
-                pressed = Buttons::empty();
             }
+            // clear pressed buttons to avoid triggering stuff if we need to run multiple frames
+            self.data.pressed = Buttons::empty();
         }
         // render frame
         let mut frame = self.platform.start_frame();
         let (eye, at, up) = self.mode.camera(interp);
-        self.renderer.set_camera(eye, at, up);
-        self.mode.render(interp, &self.renderer, &mut frame);
+        self.data.renderer.set_camera(eye, at, up);
+        self.mode.render(interp, &self.data, &mut frame);
         frame.finish();
     }
 }

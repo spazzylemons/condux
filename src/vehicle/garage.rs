@@ -14,14 +14,15 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{assets::Asset, render::Mesh, vehicle::Model};
 
 /// The garage manages vehicle models.
 #[derive(Default)]
 pub struct Garage {
-    models: HashMap<String, Rc<Model>>,
+    by_name: HashMap<String, u16>,
+    by_id: Vec<Model>,
 }
 
 impl Garage {
@@ -35,11 +36,33 @@ impl Garage {
             anti_drift: 12.0,
             mesh,
         };
-        self.models.insert("default".into(), Rc::new(model));
+        self.load("default".into(), model).unwrap();
     }
 
-    /// Get a reference to a model by name.
-    pub fn get(&self, name: &str) -> Option<Rc<Model>> {
-        Some(self.models.get(name)?.clone())
+    /// Try to load or replace a model with the given name.
+    pub fn load(&mut self, name: String, value: Model) -> Result<(), String> {
+        if let Some(id) = self.get_id(&name) {
+            // if name already used, replace that model
+            self.by_id[usize::from(id)] = value;
+        } else {
+            // attempt to allocate
+            let new_id = match u16::try_from(self.by_id.len()) {
+                Ok(v) => v,
+                Err(_) => return Err("too many models in garage".into()),
+            };
+            self.by_id.push(value);
+            self.by_name.insert(name, new_id);
+        }
+        Ok(())
+    }
+
+    /// Get a model ID by name.
+    pub fn get_id(&self, name: &str) -> Option<u16> {
+        Some(*self.by_name.get(name)?)
+    }
+
+    /// Get a model from its ID.
+    pub fn get_model(&self, id: u16) -> Option<&Model> {
+        self.by_id.get(usize::from(id))
     }
 }
