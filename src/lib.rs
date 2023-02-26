@@ -16,6 +16,7 @@
 
 #![cfg_attr(target_os = "horizon", feature(allocator_api))]
 
+use mode::Mode;
 use ouroboros::self_referencing;
 
 use vehicle::AIController;
@@ -24,6 +25,7 @@ use wasm_bindgen::prelude::*;
 
 mod assets;
 mod linalg;
+mod mode;
 mod octree;
 mod platform;
 #[macro_use]
@@ -63,10 +65,12 @@ struct Game {
     pressed: Buttons,
     /// The model of the vehicle.
     model: Model,
-    /// The game state.
+    /// The line renderer.
+    renderer: Renderer,
+    /// The game mode.
     #[borrows(controls, model)]
     #[covariant]
-    state: GameState<'this>,
+    mode: Box<dyn Mode + 'this>,
 }
 
 impl Game {
@@ -87,7 +91,6 @@ impl Game {
 
         let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
         let octree = Octree::new(&spline);
-        renderer.load_spline(&spline);
 
         let controls = Cell::new(Controls {
             buttons: Buttons::empty(),
@@ -101,8 +104,9 @@ impl Game {
             controls,
             pressed: Buttons::empty(),
             model,
-            state_builder: move |controls, model| {
-                let mut state = GameState::new(spline, octree, renderer, 0);
+            renderer,
+            mode_builder: move |controls, model| {
+                let mut state = Box::new(GameState::new(spline, octree, 0));
                 // spawn player
                 let spawn = state.spline.get_baked(0.0);
                 state.spawn(spawn, model, Box::new(PlayerController { controls }));
@@ -144,18 +148,21 @@ impl Game {
         self.update_controls();
         // if pause pressed, toggle walls
         if self.borrow_pressed().contains(Buttons::PAUSE) {
-            self.with_state_mut(|state| state.walls = !state.walls);
+            // self.with_mode_mut(|state| state.walls = !state.walls);
         }
         // update game state
         let (mut i, interp) = self.with_mut(|fields| fields.timer.frame_ticks(fields.platform));
+        let pressed = *self.borrow_pressed();
         while i > 0 {
             i -= 1;
-            self.with_state_mut(|state| state.update());
+            self.with_mode_mut(|mode| mode.tick(pressed));
         }
         // render frame
         self.with_mut(|fields| {
             let mut frame = fields.platform.start_frame();
-            fields.state.render(interp, &mut frame);
+            let (eye, at, up) = fields.mode.camera(interp);
+            fields.renderer.set_camera(eye, at, up);
+            fields.mode.render(interp, fields.renderer, &mut frame);
             frame.finish();
         });
     }

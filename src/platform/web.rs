@@ -99,12 +99,16 @@ pub struct WebPlatform {
     navigator: web_sys::Navigator,
     /// Virtual analog stick
     virtual_analog: TouchElement,
+    /// Set to true when mobile pause button pressed
+    pause_press: Rc<Cell<bool>>,
     /// element to show for gamepad mapping note
     gamepad_mapping_note: web_sys::Element,
     /// Reference to keydown event listener
     _key_down: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     /// Reference to keyup event listener
     _key_up: Closure<dyn Fn(web_sys::KeyboardEvent)>,
+    /// Reference to onclick event listener
+    _on_click: Closure<dyn Fn()>,
 }
 
 fn is_pressed(button: &JsValue) -> bool {
@@ -180,12 +184,22 @@ impl Platform for WebPlatform {
                 let new_val = keyboard_buttons_clone.get() & !get_keycode_bitmask(&event.key());
                 keyboard_buttons_clone.set(new_val);
             });
+        // create pause button reference
+        let pause_press = Rc::new(Cell::new(false));
+        // create onclick listener
+        let pause_press_clone = pause_press.clone();
+        let on_click = Closure::<dyn Fn()>::new(move || pause_press_clone.set(true));
         // register listeners
         window
             .add_event_listener_with_callback("keydown", key_down.as_ref().unchecked_ref())
             .unwrap();
         window
             .add_event_listener_with_callback("keyup", key_up.as_ref().unchecked_ref())
+            .unwrap();
+        document
+            .get_element_by_id("virtual-pause")
+            .unwrap()
+            .add_event_listener_with_callback("click", on_click.as_ref().unchecked_ref())
             .unwrap();
         // return platform object
         Self {
@@ -195,10 +209,12 @@ impl Platform for WebPlatform {
             performance,
             navigator,
             virtual_analog: TouchElement::new("virtual-analog", &document),
+            pause_press,
             gamepad_mapping_note,
 
             _key_down: key_down,
             _key_up: key_up,
+            _on_click: on_click,
         }
     }
 
@@ -264,6 +280,11 @@ impl Platform for WebPlatform {
             } else if y >= 0.5 {
                 buttons |= Buttons::OK;
             }
+        }
+
+        if self.pause_press.get() {
+            buttons |= Buttons::PAUSE;
+            self.pause_press.set(false);
         }
 
         self.gamepad_mapping_note

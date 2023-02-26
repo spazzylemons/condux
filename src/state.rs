@@ -18,8 +18,9 @@ use std::fmt::Write;
 
 use crate::{
     linalg::{Length, Mtx, Quat, Vector},
+    mode::Mode,
     octree::Octree,
-    platform::Frame,
+    platform::{Buttons, Frame},
     render::Renderer,
     spline::Spline,
     util::Approach,
@@ -79,8 +80,6 @@ pub struct GameState<'a> {
     camera: CameraState,
     prev_camera: CameraState,
 
-    pub renderer: Renderer,
-
     pub camera_focus: usize,
 
     pub walls: bool,
@@ -96,16 +95,15 @@ fn adjust_normal(up: Vector, normal: Vector) -> Vector {
 
 impl<'a> GameState<'a> {
     #[must_use]
-    pub fn new(spline: Spline, octree: Octree, renderer: Renderer, camera_focus: usize) -> Self {
+    pub fn new(spline: Spline, octree: Octree, camera_focus: usize) -> Self {
         Self {
             vehicle_states: vec![],
             spline,
             octree,
             camera: CameraState::default(),
             prev_camera: CameraState::default(),
-            renderer,
             camera_focus,
-            walls: false,
+            walls: true,
         }
     }
 
@@ -178,8 +176,13 @@ impl<'a> GameState<'a> {
         // update prev camera as well
         self.prev_camera = self.camera.clone();
     }
+}
 
-    pub fn update(&mut self) {
+impl<'a> Mode for GameState<'a> {
+    fn tick(&mut self, pressed: Buttons) {
+        if pressed.contains(Buttons::PAUSE) {
+            self.walls = !self.walls;
+        }
         // check all vehicles that may need to respawn
         let mut need_to_reset_camera = false;
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
@@ -275,31 +278,28 @@ impl<'a> GameState<'a> {
         self.update_camera_pos();
     }
 
-    pub fn render(&mut self, interp: f32, frame: &mut Frame) {
+    fn camera(&self, interp: f32) -> (Vector, Vector, Vector) {
         let interp_camera_pos =
             (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
         let interp_camera_target =
             (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
         let interp_camera_up = (self.camera.up * interp) + (self.prev_camera.up * (1.0 - interp));
 
-        self.renderer
-            .set_camera(interp_camera_pos, interp_camera_target, interp_camera_up);
+        (interp_camera_pos, interp_camera_target, interp_camera_up)
+    }
 
+    fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame) {
         for state in &self.vehicle_states {
             let (pos, rot) = state.interpolate(interp);
-            state
-                .vehicle
-                .ty
-                .mesh
-                .render(&self.renderer, pos, rot, frame);
+            state.vehicle.ty.mesh.render(renderer, pos, rot, frame);
         }
 
-        self.renderer.render_spline(frame, self.walls);
+        self.spline.render(renderer, frame, self.walls);
 
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = self.focused_vehicle();
             let speed = vehicle.signed_speed();
-            render_write!(self.renderer, 6.0, 18.0, 2.0, frame, "SPEED {:.2}", speed);
+            render_write!(renderer, 6.0, 18.0, 2.0, frame, "SPEED {:.2}", speed);
         }
     }
 }

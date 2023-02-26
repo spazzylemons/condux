@@ -20,6 +20,8 @@ use crate::{
     assets::Asset,
     linalg::{Length, Mtx, Vector},
     octree::Octree,
+    platform::Frame,
+    render::Renderer,
     vehicle::Vehicle,
 };
 
@@ -50,6 +52,11 @@ pub struct Spline {
     total_tilt: f32,
     /// The approximate length of the spline.
     pub length: f32,
+
+    /// The points to render for the floor.
+    render_floor: Vec<(Vector, Vector)>,
+    /// The points to render for the walls.
+    render_walls: Vec<(Vector, Vector)>,
 }
 
 pub struct CollisionState {
@@ -132,6 +139,9 @@ impl Spline {
             baked: vec![],
             total_tilt,
             length: 0.0,
+
+            render_floor: vec![],
+            render_walls: vec![],
         };
         // for each point, recursively find points to bake
         for i in 0..num_points {
@@ -147,6 +157,9 @@ impl Spline {
             .point
             .dist(spline.baked[spline.baked.len() - 1].point);
         spline.length += final_length;
+        // build render info
+        spline.prerender();
+        // all good
         Some(spline)
     }
 
@@ -342,5 +355,64 @@ impl Spline {
         let proj = (direction * d) + origin;
         let dist = proj.dist_sq(point);
         (offset + d, dist)
+    }
+
+    fn prerender(&mut self) {
+        let mut d = 0.0;
+        while d < self.length {
+            let p = self.get_baked(d);
+            let (mut u, r) = self.get_up_right(d);
+            let r = r * Self::TRACK_RADIUS;
+            let mut pl = p - r;
+            let mut pr = p + r;
+            self.render_floor.push((pl, pr));
+            u *= Self::WALL_HEIGHT;
+            pl += u;
+            pr += u;
+            self.render_walls.push((pl, pr));
+            d += 1.0;
+        }
+    }
+
+    fn render_spline_segment(
+        &self,
+        renderer: &Renderer,
+        frame: &mut Frame,
+        index: usize,
+        walls: bool,
+    ) {
+        // avoid modulus for efficiency
+        let mut other_index = index + 1;
+        if other_index == self.render_floor.len() {
+            other_index = 0;
+        }
+        // get floor points
+        let (l1, r1) = self.render_floor[index];
+        let (l2, r2) = self.render_floor[other_index];
+        renderer.line(l1, l2, frame);
+        renderer.line(r1, r2, frame);
+        renderer.line(l1, r1, frame);
+        if walls {
+            // get wall points
+            let (wl1, wr1) = self.render_walls[index];
+            let (wl2, wr2) = self.render_walls[other_index];
+            renderer.line(l1, wl1, frame);
+            renderer.line(r1, wr1, frame);
+            renderer.line(wl1, wl2, frame);
+            renderer.line(wr1, wr2, frame);
+        }
+    }
+
+    pub fn render(&self, renderer: &Renderer, frame: &mut Frame, walls: bool) {
+        // in case no points loaded, don't draw
+        if self.render_floor.is_empty() {
+            return;
+        }
+
+        // TODO precalculate all lines and render in a tight loop
+        // when the wall code is more solidified
+        for i in 0..self.render_floor.len() {
+            self.render_spline_segment(renderer, frame, i, walls);
+        }
     }
 }
