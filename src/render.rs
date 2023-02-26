@@ -14,8 +14,6 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fmt::Write;
-
 use crate::{
     assets::Asset,
     linalg::{Mtx, Vector},
@@ -139,51 +137,18 @@ impl Renderer {
         frame.line(x0, y0, x1, y1);
     }
 
-    pub fn writer<'a, 'b, 'c>(
-        &'a self,
-        x: f32,
-        y: f32,
-        scale: f32,
-        frame: &'b mut Frame<'c>,
-    ) -> RendererWriter<'a, 'b, 'c> {
-        RendererWriter {
-            renderer: self,
-            x,
-            y,
-            scale,
-            frame,
-        }
-    }
-}
-
-pub struct RendererWriter<'a, 'b, 'c> {
-    renderer: &'a Renderer,
-    x: f32,
-    y: f32,
-    scale: f32,
-    frame: &'b mut Frame<'c>,
-}
-
-impl<'a, 'b, 'c> Write for RendererWriter<'a, 'b, 'c> {
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+    pub fn write(&self, mut x: f32, y: f32, scale: f32, frame: &mut Frame, s: &str) {
         for c in s.chars() {
             let codepoint = u32::from(c);
             if codepoint >= 0x20 {
                 let codepoint = (codepoint - 0x20) as usize;
-                if codepoint < self.renderer.glyphs.len() {
-                    self.renderer.glyphs[codepoint].render(self.x, self.y, self.scale, self.frame);
+                if let Some(glyph) = self.glyphs.get(codepoint) {
+                    glyph.render(x, y, scale, frame);
                 }
             }
-            self.x += GLYPH_SPACING * self.scale;
+            x += GLYPH_SPACING * scale;
         }
-        Ok(())
     }
-}
-
-macro_rules! render_write {
-    ($dst:expr, $x:expr, $y:expr, $scale:expr, $frame:expr, $($arg:tt)*) => {
-        write!((($dst).writer($x, $y, $scale, $frame)), $($arg)*).unwrap()
-    };
 }
 
 impl Mesh {

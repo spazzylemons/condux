@@ -14,13 +14,13 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::cell::Cell;
+use std::rc::Rc;
 
 use crate::{
     linalg::{Length, Mtx, Quat, Vector},
     octree::Octree,
-    platform::{Buttons, Controls},
-    render::Mesh,
+    platform::{Buttons, Controls, Frame},
+    render::{Mesh, Renderer},
     spline::Spline,
     timing::TICK_DELTA,
     util::Approach,
@@ -41,7 +41,7 @@ pub struct Model {
     pub mesh: Mesh,
 }
 
-pub struct ControllerGuidance {
+pub struct ControllerGuidance<'a> {
     /// The horizontal value.
     pub horizontal: f32,
     /// The vehicle position.
@@ -54,15 +54,17 @@ pub struct ControllerGuidance {
     pub forward: Vector,
     /// A point somewhat ahead to target.
     pub target: Vector,
+    /// The state of the controls.
+    pub controls: &'a Controls,
 }
 
-pub struct Vehicle<'a> {
+pub struct Vehicle {
     pub position: Vector,
     pub rotation: Quat,
     pub velocity: Vector,
     pub steering: f32,
-    pub ty: &'a Model,
-    pub controller: Box<dyn Controller + 'a>,
+    model: Rc<Model>,
+    pub controller: Box<dyn Controller>,
     /// When containing a value, the vehicle cannot be controlled, does not collide
     /// with the track, and will be respawned when the timer reaches zero.
     pub respawn_timer: Option<u8>,
@@ -74,7 +76,7 @@ pub struct Vehicle<'a> {
     last_offset: f32,
 }
 
-impl<'a> Vehicle<'a> {
+impl Vehicle {
     pub const RADIUS: f32 = 0.3;
 
     pub const MAX_GRAVITY_HEIGHT: f32 = 8.0;
@@ -91,12 +93,12 @@ impl<'a> Vehicle<'a> {
     /// How far ahead we look on the spline for guiding AI.
     const GUIDANCE_LOOKAHEAD: f32 = 4.0;
 
-    pub fn new(pos: Vector, ty: &'a Model, controller: Box<dyn Controller + 'a>) -> Self {
+    pub fn new(pos: Vector, model: Rc<Model>, controller: Box<dyn Controller>) -> Self {
         Self {
             position: pos,
             rotation: Quat::IDENT,
             velocity: Vector::ZERO,
-            ty,
+            model,
             controller,
             steering: 0.0,
             respawn_timer: None,
@@ -106,7 +108,7 @@ impl<'a> Vehicle<'a> {
         }
     }
 
-    fn guidance(&self, spline: &Spline) -> ControllerGuidance {
+    fn guidance<'a>(&self, spline: &Spline, controls: &'a Controls) -> ControllerGuidance<'a> {
         ControllerGuidance {
             horizontal: self.last_horizontal,
             position: self.position,
@@ -114,6 +116,7 @@ impl<'a> Vehicle<'a> {
             up: self.up_vector(),
             forward: self.forward_vector(),
             target: spline.get_baked(self.last_offset + Self::GUIDANCE_LOOKAHEAD),
+            controls,
         }
     }
 
@@ -146,8 +149,10 @@ impl<'a> Vehicle<'a> {
         }
         let steering = self.controller.steering();
         // local rotate for steering
-        let steering_rotation =
-            Quat::axis_angle(&Vector::Y_AXIS, -steering * self.ty.handling * TICK_DELTA);
+        let steering_rotation = Quat::axis_angle(
+            &Vector::Y_AXIS,
+            -steering * self.model.handling * TICK_DELTA,
+        );
         self.rotation = steering_rotation * self.rotation;
         // smooth steering visual
         self.steering = steering * STEERING_APPROACH_SPEED * TICK_DELTA
@@ -164,7 +169,7 @@ impl<'a> Vehicle<'a> {
             Pedal::Brake => -1.0,
             Pedal::Neutral => 0.0,
         };
-        *without += forward * (pedal * self.ty.acceleration * TICK_DELTA);
+        *without += forward * (pedal * self.model.acceleration * TICK_DELTA);
     }
 
     fn approach_aligned_without_gravity(&mut self, forward: Vector, without: &mut Vector) {
@@ -174,7 +179,7 @@ impl<'a> Vehicle<'a> {
         let length = without.mag();
         *without = without.normalized();
 
-        let anti_drift = self.ty.anti_drift;
+        let anti_drift = self.model.anti_drift;
         let v = if f.dot(without) > b.dot(without) {
             without.approach(anti_drift, f)
         } else {
@@ -196,7 +201,7 @@ impl<'a> Vehicle<'a> {
         let mut without = self.velocity - gravity;
         self.apply_acceleration_no_speed_cap(&mut without, forward);
         // speed cap
-        let speed = self.ty.speed;
+        let speed = self.model.speed;
         if without.mag_sq() > speed * speed {
             without = without.normalized() * speed;
         }
@@ -286,12 +291,12 @@ impl<'a> Vehicle<'a> {
         }
     }
 
-    fn update_controller(&mut self, spline: &Spline) {
-        self.controller.update(&self.guidance(spline));
+    fn update_controller(&mut self, spline: &Spline, controls: &Controls) {
+        self.controller.update(&self.guidance(spline, controls));
     }
 
-    pub fn update(&mut self, spline: &Spline, octree: &Octree, walls: bool) {
-        self.update_controller(spline);
+    pub fn update(&mut self, spline: &Spline, octree: &Octree, controls: &Controls, walls: bool) {
+        self.update_controller(spline, controls);
         self.update_physics();
         self.update_collision(spline, octree, walls);
         // normalize rotation
@@ -303,6 +308,10 @@ impl<'a> Vehicle<'a> {
         let v = self.velocity_without_gravity();
         let f = self.forward_vector();
         v.mag().copysign(v.dot(&f))
+    }
+
+    pub fn render(&self, renderer: &Renderer, pos: Vector, rot: Mtx, frame: &mut Frame) {
+        self.model.mesh.render(renderer, pos, rot, frame);
     }
 }
 
@@ -329,24 +338,30 @@ pub trait Controller {
     }
 }
 
-pub struct PlayerController<'a> {
-    pub controls: &'a Cell<Controls>,
+#[derive(Default)]
+pub struct PlayerController {
+    next_pedal: Pedal,
+    next_steering: f32,
 }
 
-impl<'a> Controller for PlayerController<'a> {
+impl Controller for PlayerController {
     fn pedal(&self) -> Pedal {
-        let controls = self.controls.get();
-        if controls.buttons.contains(Buttons::BACK) {
-            Pedal::Brake
-        } else if controls.buttons.contains(Buttons::OK) {
-            Pedal::Accel
-        } else {
-            Pedal::Neutral
-        }
+        self.next_pedal
     }
 
     fn steering(&self) -> f32 {
-        self.controls.get().steering
+        self.next_steering
+    }
+
+    fn update(&mut self, guidance: &ControllerGuidance) {
+        self.next_pedal = if guidance.controls.buttons.contains(Buttons::BACK) {
+            Pedal::Brake
+        } else if guidance.controls.buttons.contains(Buttons::OK) {
+            Pedal::Accel
+        } else {
+            Pedal::Neutral
+        };
+        self.next_steering = guidance.controls.steering;
     }
 }
 

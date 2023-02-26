@@ -14,13 +14,14 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fmt::Write;
+use std::rc::Rc;
 
 use crate::{
+    garage::Garage,
     linalg::{Length, Mtx, Quat, Vector},
     mode::Mode,
     octree::Octree,
-    platform::{Buttons, Frame},
+    platform::{Buttons, Controls, Frame},
     render::Renderer,
     spline::Spline,
     util::Approach,
@@ -32,14 +33,29 @@ const CAMERA_APPROACH_SPEED: f32 = 2.0;
 const CAMERA_UP_DISTANCE: f32 = 0.325;
 const STEERING_FACTOR: f32 = 0.25;
 
-struct VehicleState<'a> {
-    vehicle: Vehicle<'a>,
+struct VehicleState {
+    vehicle: Vehicle,
     prev_pos: Vector,
     prev_rot: Quat,
     prev_steering: f32,
 }
 
-impl<'a> VehicleState<'a> {
+impl VehicleState {
+    pub fn new(pos: Vector, model: Rc<Model>, controller: Box<dyn Controller>) -> Self {
+        let vehicle = Vehicle::new(pos, model, controller);
+
+        let prev_pos = vehicle.position;
+        let prev_rot = vehicle.rotation;
+        let prev_steering = vehicle.steering;
+
+        Self {
+            vehicle,
+            prev_pos,
+            prev_rot,
+            prev_steering,
+        }
+    }
+
     fn interpolate(&self, interp: f32) -> (Vector, Mtx) {
         let pos = (self.vehicle.position * interp) + (self.prev_pos * (1.0 - interp));
 
@@ -71,8 +87,9 @@ impl CameraState {
     }
 }
 
-pub struct GameState<'a> {
-    vehicle_states: Vec<VehicleState<'a>>,
+pub struct RaceMode {
+    vehicle_states: Vec<VehicleState>,
+    garage: Garage,
 
     pub spline: Spline,
     pub octree: Octree,
@@ -93,11 +110,14 @@ fn adjust_normal(up: Vector, normal: Vector) -> Vector {
     (normal - up * normal.dot(&up)).normalized()
 }
 
-impl<'a> GameState<'a> {
+impl RaceMode {
     #[must_use]
     pub fn new(spline: Spline, octree: Octree, camera_focus: usize) -> Self {
+        let mut garage = Garage::default();
+        garage.load_hardcoded();
         Self {
             vehicle_states: vec![],
+            garage,
             spline,
             octree,
             camera: CameraState::default(),
@@ -107,20 +127,13 @@ impl<'a> GameState<'a> {
         }
     }
 
-    pub fn spawn(&mut self, pos: Vector, ty: &'a Model, controller: Box<dyn Controller + 'a>) {
-        let vehicle = Vehicle::new(pos, ty, controller);
-
-        let prev_pos = vehicle.position;
-        let prev_rot = vehicle.rotation;
-        let prev_steering = vehicle.steering;
-
-        let vehicle_state = VehicleState {
-            vehicle,
-            prev_pos,
-            prev_rot,
-            prev_steering,
+    pub fn spawn(&mut self, pos: Vector, model_name: &str, controller: Box<dyn Controller>) {
+        let model = match self.garage.get(&model_name) {
+            Some(model) => model,
+            None => return,
         };
-        self.vehicle_states.push(vehicle_state);
+        self.vehicle_states
+            .push(VehicleState::new(pos, model, controller));
     }
 
     fn focused_vehicle(&self) -> &Vehicle {
@@ -178,8 +191,8 @@ impl<'a> GameState<'a> {
     }
 }
 
-impl<'a> Mode for GameState<'a> {
-    fn tick(&mut self, pressed: Buttons) {
+impl Mode for RaceMode {
+    fn tick(&mut self, controls: Controls, pressed: Buttons) -> Option<Box<dyn Mode>> {
         if pressed.contains(Buttons::PAUSE) {
             self.walls = !self.walls;
         }
@@ -227,7 +240,9 @@ impl<'a> Mode for GameState<'a> {
             state.prev_pos = state.vehicle.position;
             state.prev_rot = state.vehicle.rotation;
             state.prev_steering = state.vehicle.steering;
-            state.vehicle.update(&self.spline, &self.octree, self.walls);
+            state
+                .vehicle
+                .update(&self.spline, &self.octree, &controls, self.walls);
 
             total_translations.push(Vector::ZERO);
             original_velocity.push(state.vehicle.velocity);
@@ -276,6 +291,8 @@ impl<'a> Mode for GameState<'a> {
         }
         // now, run camera logic
         self.update_camera_pos();
+        // no mode transition implemented yet
+        None
     }
 
     fn camera(&self, interp: f32) -> (Vector, Vector, Vector) {
@@ -291,7 +308,7 @@ impl<'a> Mode for GameState<'a> {
     fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame) {
         for state in &self.vehicle_states {
             let (pos, rot) = state.interpolate(interp);
-            state.vehicle.ty.mesh.render(renderer, pos, rot, frame);
+            state.vehicle.render(renderer, pos, rot, frame);
         }
 
         self.spline.render(renderer, frame, self.walls);
@@ -299,7 +316,7 @@ impl<'a> Mode for GameState<'a> {
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = self.focused_vehicle();
             let speed = vehicle.signed_speed();
-            render_write!(renderer, 6.0, 18.0, 2.0, frame, "SPEED {:.2}", speed);
+            renderer.write(6.0, 18.0, 2.0, frame, &format!("SPEED {:.2}", speed));
         }
     }
 }

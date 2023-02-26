@@ -16,61 +16,40 @@
 
 #![cfg_attr(target_os = "horizon", feature(allocator_api))]
 
-use mode::Mode;
-use ouroboros::self_referencing;
+use mode::{title::TitleMode, Mode};
 
-use vehicle::AIController;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 mod assets;
+mod garage;
 mod linalg;
 mod mode;
 mod octree;
 mod platform;
-#[macro_use]
 mod render;
 mod spline;
-mod state;
 mod timing;
 mod util;
 mod vehicle;
 
-use std::cell::Cell;
-
-use assets::Asset;
 use platform::{Buttons, Controls, Impl, Platform};
-use render::Mesh;
 
 const DEADZONE: f32 = 0.03;
 
-use crate::{
-    octree::Octree,
-    render::Renderer,
-    spline::Spline,
-    state::GameState,
-    timing::Timer,
-    vehicle::{Model, PlayerController},
-};
+use crate::{render::Renderer, timing::Timer};
 
-#[self_referencing]
 struct Game {
     /// Platform-specific interface.
     platform: Impl,
     /// The game timer.
     timer: Timer,
-    /// The state of the controls.
-    controls: Cell<Controls>,
-    /// The buttons that have been pressed this frame.
-    pressed: Buttons,
-    /// The model of the vehicle.
-    model: Model,
+    /// The last pressed buttons.
+    last_buttons: Buttons,
     /// The line renderer.
     renderer: Renderer,
     /// The game mode.
-    #[borrows(controls, model)]
-    #[covariant]
-    mode: Box<dyn Mode + 'this>,
+    mode: Box<dyn Mode>,
 }
 
 impl Game {
@@ -79,92 +58,52 @@ impl Game {
         let platform = platform::Impl::init(640, 480);
         let mut renderer = Renderer::new();
         renderer.load_glyphs();
-
-        let mesh = Mesh::load(&mut Asset::load("mesh_vehicle.bin").unwrap()).unwrap();
-        let model = Model {
-            speed: 15.0,
-            acceleration: 7.0,
-            handling: 1.5,
-            anti_drift: 12.0,
-            mesh,
-        };
-
-        let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
-        let octree = Octree::new(&spline);
-
-        let controls = Cell::new(Controls {
-            buttons: Buttons::empty(),
-            steering: 0.0,
-        });
         let timer = Timer::new(&platform);
 
-        GameBuilder {
+        Self {
             platform,
             timer,
-            controls,
-            pressed: Buttons::empty(),
-            model,
+            last_buttons: Buttons::empty(),
             renderer,
-            mode_builder: move |controls, model| {
-                let mut state = Box::new(GameState::new(spline, octree, 0));
-                // spawn player
-                let spawn = state.spline.get_baked(0.0);
-                state.spawn(spawn, model, Box::new(PlayerController { controls }));
-                // spawn some other vehicles
-                let spawn = state.spline.get_baked(5.0);
-                state.spawn(spawn, model, Box::new(AIController::default()));
-                let spawn = state.spline.get_baked(10.0);
-                state.spawn(spawn, model, Box::new(AIController::default()));
-                let spawn = state.spline.get_baked(15.0);
-                state.spawn(spawn, model, Box::new(AIController::default()));
-                // set camera behind player
-                state.teleport_camera();
-                // return state object
-                state
-            },
+            mode: Box::new(TitleMode),
         }
-        .build()
     }
 
     fn should_run(&self) -> bool {
-        self.borrow_platform().should_run()
+        self.platform.should_run()
     }
 
-    fn update_controls(&mut self) {
-        let old_controls = self.borrow_controls().get().buttons;
+    fn update_controls(&mut self) -> (Controls, Buttons) {
         // get controls
-        let mut new_controls = self.with_platform_mut(|platform| platform.poll());
+        let mut controls = self.platform.poll();
         // apply deadzone
-        if new_controls.steering.abs() < DEADZONE {
-            new_controls.steering = 0.0;
+        if controls.steering.abs() < DEADZONE {
+            controls.steering = 0.0;
         }
-        // set controls
-        self.borrow_controls().set(new_controls);
         // determine which buttons were pressed
-        self.with_pressed_mut(|pressed| *pressed = new_controls.buttons & !old_controls);
+        let pressed = controls.buttons & !self.last_buttons;
+        self.last_buttons = controls.buttons;
+        (controls, pressed)
     }
 
     fn iteration(&mut self) {
-        self.update_controls();
-        // if pause pressed, toggle walls
-        if self.borrow_pressed().contains(Buttons::PAUSE) {
-            // self.with_mode_mut(|state| state.walls = !state.walls);
-        }
+        let (controls, mut pressed) = self.update_controls();
         // update game state
-        let (mut i, interp) = self.with_mut(|fields| fields.timer.frame_ticks(fields.platform));
-        let pressed = *self.borrow_pressed();
+        let (mut i, interp) = self.timer.frame_ticks(&self.platform);
         while i > 0 {
             i -= 1;
-            self.with_mode_mut(|mode| mode.tick(pressed));
+            if let Some(new_mode) = self.mode.tick(controls, pressed) {
+                self.mode = new_mode;
+                // clear pressed buttons to avoid triggering stuff in new mode
+                pressed = Buttons::empty();
+            }
         }
         // render frame
-        self.with_mut(|fields| {
-            let mut frame = fields.platform.start_frame();
-            let (eye, at, up) = fields.mode.camera(interp);
-            fields.renderer.set_camera(eye, at, up);
-            fields.mode.render(interp, fields.renderer, &mut frame);
-            frame.finish();
-        });
+        let mut frame = self.platform.start_frame();
+        let (eye, at, up) = self.mode.camera(interp);
+        self.renderer.set_camera(eye, at, up);
+        self.mode.render(interp, &self.renderer, &mut frame);
+        frame.finish();
     }
 }
 
