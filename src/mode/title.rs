@@ -34,7 +34,7 @@ impl Mode for TitleMode {
             // transition to race
             let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
             let octree = Octree::new(&spline);
-            let mut mode = RaceMode::new(spline, octree, 0);
+            let mut mode = Box::new(RaceMode::new(spline, octree, 0));
             // spawn player
             let spawn = mode.spline.get_baked(0.0);
             mode.spawn(spawn, "default", Box::new(PlayerController::default()));
@@ -48,7 +48,7 @@ impl Mode for TitleMode {
             // set camera behind player
             mode.teleport_camera();
             // send mode transition
-            Some(Box::new(mode))
+            Some(mode)
         } else {
             None
         }

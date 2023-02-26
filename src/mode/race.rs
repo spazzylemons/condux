@@ -17,15 +17,14 @@
 use std::rc::Rc;
 
 use crate::{
-    garage::Garage,
     linalg::{Length, Mtx, Quat, Vector},
     mode::Mode,
     octree::Octree,
     platform::{Buttons, Controls, Frame},
     render::Renderer,
     spline::Spline,
-    util::Approach,
-    vehicle::{Controller, Model, Vehicle},
+    util::{Approach, Interpolate},
+    vehicle::{garage::Garage, Controller, Model, Vehicle},
 };
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
@@ -57,7 +56,7 @@ impl VehicleState {
     }
 
     fn interpolate(&self, interp: f32) -> (Vector, Mtx) {
-        let pos = (self.vehicle.position * interp) + (self.prev_pos * (1.0 - interp));
+        let pos = self.prev_pos.interpolate(self.vehicle.position, interp);
 
         let prev_vehicle_rot = self.prev_rot;
         let cur_vehicle_rot = self.vehicle.rotation;
@@ -69,6 +68,45 @@ impl VehicleState {
         let rot_quat = Quat::slerp(prev_quat, cur_quat, interp);
 
         (pos, rot_quat.into())
+    }
+
+    fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame) {
+        let (pos, rot) = self.interpolate(interp);
+        self.vehicle.render(renderer, pos, rot, frame);
+    }
+
+    /// Returns true if the vehicle was respawned.
+    fn try_respawn(&mut self) -> bool {
+        if let Some(timer) = self.vehicle.respawn_timer {
+            // decrement timer
+            let timer = timer - 1;
+            // if we hit zero, respawn
+            if timer == 0 {
+                // reset vehicle position, including interpolation
+                self.vehicle.position = self.vehicle.respawn_point;
+                self.prev_pos = self.vehicle.respawn_point;
+                // reset the rest of the vehicle state and interpolation
+                self.prev_rot = Quat::IDENT;
+                self.vehicle.rotation = Quat::IDENT;
+                self.vehicle.steering = 0.0;
+                self.prev_steering = 0.0;
+                self.vehicle.velocity = Vector::ZERO;
+                // clear respawn timer
+                self.vehicle.respawn_timer = None;
+                return true;
+            } else {
+                // otherwise, just update timer
+                self.vehicle.respawn_timer = Some(timer);
+            }
+        }
+        false
+    }
+
+    fn update(&mut self, spline: &Spline, octree: &Octree, controls: &Controls, walls: bool) {
+        self.prev_pos = self.vehicle.position;
+        self.prev_rot = self.vehicle.rotation;
+        self.prev_steering = self.vehicle.steering;
+        self.vehicle.update(spline, octree, &controls, walls);
     }
 }
 
@@ -84,6 +122,35 @@ impl CameraState {
         self.target = vehicle.position;
         self.up = vehicle.up_vector();
         self.target += self.up * CAMERA_UP_DISTANCE;
+    }
+
+    fn update(&mut self, vehicle: &Vehicle) {
+        // only do this if the vehicle won't respawn
+        // this lets us see the vehicle fall
+        if vehicle.respawn_timer.is_none() {
+            // set ourselves to the proper distance
+            let tmp = Vector::Z_AXIS * (vehicle.position.dist(self.pos) - CAMERA_FOLLOW_DISTANCE);
+            let delta = self.pos - vehicle.position;
+            let up = vehicle.up_vector();
+            let camera_mtx = Mtx::looking_at(delta, up);
+            let translation_global = camera_mtx * tmp;
+            self.pos += translation_global;
+            // approach target location
+            let target = self.target_pos(vehicle);
+            self.pos.approach_mut(CAMERA_APPROACH_SPEED, target);
+        }
+        self.look_at(vehicle);
+    }
+
+    #[must_use]
+    fn target_pos(&self, vehicle: &Vehicle) -> Vector {
+        let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
+        vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
+    }
+
+    fn teleport(&mut self, vehicle: &Vehicle) {
+        self.pos = self.target_pos(vehicle);
+        self.look_at(vehicle);
     }
 }
 
@@ -128,16 +195,10 @@ impl RaceMode {
     }
 
     pub fn spawn(&mut self, pos: Vector, model_name: &str, controller: Box<dyn Controller>) {
-        let model = match self.garage.get(&model_name) {
-            Some(model) => model,
-            None => return,
-        };
-        self.vehicle_states
-            .push(VehicleState::new(pos, model, controller));
-    }
-
-    fn focused_vehicle(&self) -> &Vehicle {
-        &self.vehicle_states[self.camera_focus].vehicle
+        if let Some(model) = self.garage.get(&model_name) {
+            self.vehicle_states
+                .push(VehicleState::new(pos, model, controller));
+        }
     }
 
     fn update_camera_pos(&mut self) {
@@ -146,37 +207,8 @@ impl RaceMode {
         }
 
         self.prev_camera = self.camera.clone();
-        // only do this if the vehicle won't respawn
-        // this lets us see the vehicle fall
-        if self.focused_vehicle().respawn_timer.is_none() {
-            // set ourselves to the proper distance
-            let tmp = Vector::Z_AXIS
-                * (self.vehicle_states[self.camera_focus]
-                    .vehicle
-                    .position
-                    .dist(self.camera.pos)
-                    - CAMERA_FOLLOW_DISTANCE);
-            let delta = self.camera.pos - self.focused_vehicle().position;
-            let up = self.focused_vehicle().up_vector();
-            let camera_mtx = Mtx::looking_at(delta, up);
-            let translation_global = camera_mtx * tmp;
-            self.camera.pos += translation_global;
-            // approach target location
-            let target = self.target_pos();
-            self.camera.pos.approach_mut(CAMERA_APPROACH_SPEED, target);
-        }
-        self.look_at_vehicle();
-    }
-
-    fn target_pos(&self) -> Vector {
-        let vehicle = self.focused_vehicle();
-        let offset = Mtx::from(vehicle.rotation) * TARGET_ANGLE;
-        vehicle.position - offset * CAMERA_FOLLOW_DISTANCE
-    }
-
-    fn look_at_vehicle(&mut self) {
         self.camera
-            .look_at(&self.vehicle_states[self.camera_focus].vehicle);
+            .update(&self.vehicle_states[self.camera_focus].vehicle);
     }
 
     pub fn teleport_camera(&mut self) {
@@ -184,8 +216,8 @@ impl RaceMode {
             return;
         }
 
-        self.camera.pos = self.target_pos();
-        self.look_at_vehicle();
+        self.camera
+            .teleport(&self.vehicle_states[self.camera_focus].vehicle);
         // update prev camera as well
         self.prev_camera = self.camera.clone();
     }
@@ -199,30 +231,8 @@ impl Mode for RaceMode {
         // check all vehicles that may need to respawn
         let mut need_to_reset_camera = false;
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
-            if let Some(timer) = state.vehicle.respawn_timer {
-                // decrement timer
-                let timer = timer - 1;
-                // if we hit zero, respawn
-                if timer == 0 {
-                    // reset vehicle position, including interpolation
-                    state.vehicle.position = state.vehicle.respawn_point;
-                    state.prev_pos = state.vehicle.respawn_point;
-                    // reset the rest of the vehicle state and interpolation
-                    state.prev_rot = Quat::IDENT;
-                    state.vehicle.rotation = Quat::IDENT;
-                    state.vehicle.steering = 0.0;
-                    state.prev_steering = 0.0;
-                    state.vehicle.velocity = Vector::ZERO;
-                    // clear respawn timer
-                    state.vehicle.respawn_timer = None;
-                    // if this is the focused vehicle, reset the camera as well
-                    if i == self.camera_focus {
-                        need_to_reset_camera = true;
-                    }
-                } else {
-                    // otherwise, just update timer
-                    state.vehicle.respawn_timer = Some(timer);
-                }
+            if state.try_respawn() && i == self.camera_focus {
+                need_to_reset_camera = true;
             }
         }
         if need_to_reset_camera {
@@ -237,12 +247,7 @@ impl Mode for RaceMode {
         self.octree.reset_vehicles();
 
         for (i, state) in self.vehicle_states.iter_mut().enumerate() {
-            state.prev_pos = state.vehicle.position;
-            state.prev_rot = state.vehicle.rotation;
-            state.prev_steering = state.vehicle.steering;
-            state
-                .vehicle
-                .update(&self.spline, &self.octree, &controls, self.walls);
+            state.update(&self.spline, &self.octree, &controls, self.walls);
 
             total_translations.push(Vector::ZERO);
             original_velocity.push(state.vehicle.velocity);
@@ -296,25 +301,25 @@ impl Mode for RaceMode {
     }
 
     fn camera(&self, interp: f32) -> (Vector, Vector, Vector) {
-        let interp_camera_pos =
-            (self.camera.pos * interp) + (self.prev_camera.pos * (1.0 - interp));
-        let interp_camera_target =
-            (self.camera.target * interp) + (self.prev_camera.target * (1.0 - interp));
-        let interp_camera_up = (self.camera.up * interp) + (self.prev_camera.up * (1.0 - interp));
+        let interp_camera_pos = self.prev_camera.pos.interpolate(self.camera.pos, interp);
+        let interp_camera_target = self
+            .prev_camera
+            .target
+            .interpolate(self.camera.target, interp);
+        let interp_camera_up = self.prev_camera.up.interpolate(self.camera.up, interp);
 
         (interp_camera_pos, interp_camera_target, interp_camera_up)
     }
 
     fn render(&self, interp: f32, renderer: &Renderer, frame: &mut Frame) {
         for state in &self.vehicle_states {
-            let (pos, rot) = state.interpolate(interp);
-            state.vehicle.render(renderer, pos, rot, frame);
+            state.render(interp, renderer, frame);
         }
 
         self.spline.render(renderer, frame, self.walls);
 
         if self.camera_focus < self.vehicle_states.len() {
-            let vehicle = self.focused_vehicle();
+            let vehicle = &self.vehicle_states[self.camera_focus].vehicle;
             let speed = vehicle.signed_speed();
             renderer.write(6.0, 18.0, 2.0, frame, &format!("SPEED {:.2}", speed));
         }

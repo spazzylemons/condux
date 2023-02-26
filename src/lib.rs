@@ -22,7 +22,6 @@ use mode::{title::TitleMode, Mode};
 use wasm_bindgen::prelude::*;
 
 mod assets;
-mod garage;
 mod linalg;
 mod mode;
 mod octree;

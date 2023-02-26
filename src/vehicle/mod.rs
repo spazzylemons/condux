@@ -26,6 +26,8 @@ use crate::{
     util::Approach,
 };
 
+pub mod garage;
+
 const GRAVITY_APPROACH_SPEED: f32 = 5.0;
 const GRAVITY_STRENGTH: f32 = 6.0;
 const FRICTION_COEFFICIENT: f32 = 0.1;
@@ -64,7 +66,7 @@ pub struct Vehicle {
     pub velocity: Vector,
     pub steering: f32,
     model: Rc<Model>,
-    pub controller: Box<dyn Controller>,
+    controller: Box<dyn Controller>,
     /// When containing a value, the vehicle cannot be controlled, does not collide
     /// with the track, and will be respawned when the timer reaches zero.
     pub respawn_timer: Option<u8>,

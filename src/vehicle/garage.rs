@@ -19,7 +19,6 @@ use std::{collections::HashMap, rc::Rc};
 use crate::{assets::Asset, render::Mesh, vehicle::Model};
 
 /// The garage manages vehicle models.
-/// TODO avoid reference counting
 #[derive(Default)]
 pub struct Garage {
     models: HashMap<String, Rc<Model>>,

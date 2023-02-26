@@ -23,3 +23,16 @@ pub trait Approach: Sized + DivAssign<f32> + AddAssign<Self> + MulAssign<f32> {
 }
 
 impl<T: Sized + DivAssign<f32> + AddAssign<T> + MulAssign<f32>> Approach for T {}
+
+pub trait Interpolate: Sized + MulAssign<f32> + AddAssign<Self> {
+    #[must_use]
+    fn interpolate(mut self, mut rhs: Self, mut t: f32) -> Self {
+        rhs *= t;
+        t = 1.0 - t;
+        self *= t;
+        self += rhs;
+        self
+    }
+}
+
+impl<T: Sized + MulAssign<f32> + AddAssign<T>> Interpolate for T {}
