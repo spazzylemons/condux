@@ -26,7 +26,11 @@ use crate::{
     vehicle::{garage::Garage, AIController, Controller, PlayerController, Vehicle},
 };
 
-use super::{pause::PauseMode, GlobalGameData};
+use super::{
+    pause::{MenuOption, PauseMode},
+    title::TitleMode,
+    GlobalGameData,
+};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -173,8 +177,6 @@ pub struct RaceMode {
     prev_camera: CameraState,
 
     pub camera_focus: usize,
-
-    pub walls: bool,
 }
 
 // (0, sin(PI / -8), cos(PI / -8))
@@ -195,7 +197,6 @@ impl RaceMode {
             camera: CameraState::default(),
             prev_camera: CameraState::default(),
             camera_focus,
-            walls: true,
         }
     }
 
@@ -250,8 +251,24 @@ impl RaceMode {
 impl Mode for RaceMode {
     fn tick(mut self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode> {
         if data.pressed.contains(Buttons::PAUSE) {
-            // return paused
-            return Box::new(PauseMode::new(self));
+            // return pause menu
+            return Box::new(PauseMode::new(
+                self,
+                vec![
+                    // restores previous state
+                    MenuOption::previous(String::from("resume")),
+                    // creates new race state
+                    MenuOption::switch(String::from("restart"), |data| {
+                        Box::new(RaceMode::initialized(&data.garage))
+                    }),
+                    // toggles walls
+                    MenuOption::data(String::from("toggle walls"), |data| {
+                        data.walls.set(!data.walls.get())
+                    }),
+                    // creates new title screen state
+                    MenuOption::switch(String::from("quit"), |_| Box::new(TitleMode)),
+                ],
+            ));
         }
         // check all vehicles that may need to respawn
         let mut need_to_reset_camera = false;
@@ -277,7 +294,7 @@ impl Mode for RaceMode {
                 &self.spline,
                 &self.octree,
                 &data.controls,
-                self.walls,
+                data.walls.get(),
             );
 
             total_translations.push(Vector::ZERO);
@@ -349,7 +366,7 @@ impl Mode for RaceMode {
             state.render(interp, &data.garage, &mut context_3d);
         }
 
-        self.spline.render(&mut context_3d, self.walls);
+        self.spline.render(&mut context_3d, data.walls.get());
 
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[self.camera_focus].vehicle;

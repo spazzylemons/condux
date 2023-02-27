@@ -42,6 +42,7 @@ pub trait Platform {
     where
         Self: Sized;
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn should_run(&self) -> bool;
 
     fn time_msec(&self) -> u64;

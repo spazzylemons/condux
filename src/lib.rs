@@ -57,6 +57,11 @@ impl Game {
         let mut data = GlobalGameData::default();
         data.garage.load_hardcoded();
         data.font = Font::new().unwrap();
+        data.walls.set(true);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        data.should_run.set(true);
+
         let timer = Timer::new(&platform);
 
         Self {
@@ -67,8 +72,9 @@ impl Game {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn should_run(&self) -> bool {
-        self.platform.should_run()
+        self.data.should_run.get() && self.platform.should_run()
     }
 
     fn update_controls(&mut self) {
@@ -77,6 +83,13 @@ impl Game {
         // apply deadzone
         if controls.steering.abs() < DEADZONE {
             controls.steering = 0.0;
+        }
+        // cancel out up/down and left/right
+        if controls.buttons.contains(Buttons::UP | Buttons::DOWN) {
+            controls.buttons &= !(Buttons::UP | Buttons::DOWN);
+        }
+        if controls.buttons.contains(Buttons::LEFT | Buttons::RIGHT) {
+            controls.buttons &= !(Buttons::LEFT | Buttons::RIGHT);
         }
         // determine which buttons were pressed
         self.data.pressed = controls.buttons & !self.data.controls.buttons;
@@ -108,16 +121,14 @@ use std::{cell::RefCell, rc::Rc};
 #[cfg(target_arch = "wasm32")]
 fn create_closure(keep_alive: Rc<RefCell<Closure<dyn FnMut()>>>, game: Game) -> impl FnOnce() {
     move || {
-        if game.should_run() {
-            // iterate game
-            let game = game.iteration();
-            // create new closure to run
-            let closure = create_closure(keep_alive.clone(), game);
-            // store in keey_alive to prevent it from being dropped
-            keep_alive.replace(Closure::once(closure));
-            // call this closure on next animation frame
-            request_animation_frame(&keep_alive.borrow());
-        }
+        // iterate game
+        let game = game.iteration();
+        // create new closure to run
+        let closure = create_closure(keep_alive.clone(), game);
+        // store in keey_alive to prevent it from being dropped
+        keep_alive.replace(Closure::once(closure));
+        // call this closure on next animation frame
+        request_animation_frame(&keep_alive.borrow());
     }
 }
 

@@ -16,32 +16,113 @@
 
 use crate::{
     platform::Buttons,
-    render::context::{RenderContext, ScissorContext},
+    render::{
+        context::{RenderContext, ScissorContext},
+        Font,
+    },
 };
 
 use super::{GlobalGameData, Mode};
 
+/// An action that a menu option can take.
+pub enum MenuAction {
+    /// Action switches to previous mode.
+    Previous,
+    /// Action loads new mode.
+    Switch(Box<dyn Fn(&GlobalGameData) -> Box<dyn Mode>>),
+    /// Action uses global data but does not switch mode.
+    Data(Box<dyn Fn(&GlobalGameData)>),
+}
+
+/// An option in the pause menu.
+pub struct MenuOption {
+    /// The name of the option.
+    name: String,
+    /// The action to take when this option is selected.
+    /// This function takes in the previous mode and returns a new mode to switch to.
+    action: MenuAction,
+}
+
+impl MenuOption {
+    pub fn previous(name: String) -> Self {
+        Self {
+            name,
+            action: MenuAction::Previous,
+        }
+    }
+
+    pub fn switch<F>(name: String, f: F) -> Self
+    where
+        F: Fn(&GlobalGameData) -> Box<dyn Mode> + 'static,
+    {
+        Self {
+            name,
+            action: MenuAction::Switch(Box::new(f)),
+        }
+    }
+
+    pub fn data<F>(name: String, f: F) -> Self
+    where
+        F: Fn(&GlobalGameData) + 'static,
+    {
+        Self {
+            name,
+            action: MenuAction::Data(Box::new(f)),
+        }
+    }
+}
+
+/// The pause menu mode.
 pub struct PauseMode {
     contains: Box<dyn Mode>,
+    options: Vec<MenuOption>,
+    selected: usize,
 }
 
 impl PauseMode {
-    pub fn new(contains: Box<dyn Mode>) -> Self {
-        Self { contains }
+    pub fn new(contains: Box<dyn Mode>, options: Vec<MenuOption>) -> Self {
+        Self {
+            contains,
+            options,
+            selected: 0,
+        }
     }
 
-    const CLIP_WIDTH: f32 = 200.0;
+    const CLIP_WIDTH: f32 = 240.0;
+
+    const OPTION_SCALE: f32 = 3.0;
 }
 
 impl Mode for PauseMode {
-    fn tick(self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode> {
+    fn tick(mut self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode> {
         if data.pressed.contains(Buttons::PAUSE) {
             // return to contained mode
-            self.contains
-        } else {
-            // stay paused
-            self
+            return self.contains;
         }
+
+        if data.pressed.contains(Buttons::UP) && self.selected > 0 {
+            // previous option
+            self.selected -= 1;
+        } else if data.pressed.contains(Buttons::DOWN) && self.selected + 1 < self.options.len() {
+            // next option
+            self.selected += 1;
+        }
+
+        if data.pressed.contains(Buttons::OK) {
+            // select this option
+            let option = &self.options[self.selected];
+            return match &option.action {
+                MenuAction::Previous => self.contains,
+                MenuAction::Switch(f) => f(data),
+                MenuAction::Data(f) => {
+                    f(data);
+                    self
+                }
+            };
+        }
+
+        // stay paused
+        self
     }
 
     fn render(&self, _interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
@@ -58,7 +139,19 @@ impl Mode for PauseMode {
         context.line(menu_start, 0.0, menu_start, height);
         // draw "PAUSED" text
         data.font
-            .write(context, menu_start + 8.0, 8.0, 4.0, "PAUSED");
-        // options will be implemented later
+            .write(context, menu_start + 16.0, 16.0, 4.0, "PAUSED");
+        // draw options
+        let mut y = 64.0;
+        for (i, option) in self.options.iter().enumerate() {
+            let mut x = menu_start + 16.0;
+            // show cursor where we're selecting
+            if i == self.selected {
+                data.font.write(context, x, y, Self::OPTION_SCALE, ">");
+                x += Font::GLYPH_SPACING * 2.0 * Self::OPTION_SCALE;
+            }
+            data.font
+                .write(context, x, y, Self::OPTION_SCALE, &option.name);
+            y += Self::OPTION_SCALE * 8.0;
+        }
     }
 }

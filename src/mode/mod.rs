@@ -18,6 +18,8 @@ pub mod pause;
 pub mod race;
 pub mod title;
 
+use std::cell::Cell;
+
 use crate::{
     platform::{Buttons, Controls},
     render::{context::RenderContext, Font},
@@ -34,6 +36,11 @@ pub struct GlobalGameData {
     pub garage: Garage,
     /// The font.
     pub font: Font,
+    /// If true, enable walls. Stored in a Cell so it may be modified easily.
+    pub walls: Cell<bool>,
+    /// If false, the game stops running. Not present on web target.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub should_run: Cell<bool>,
 }
 
 /// A game mode.

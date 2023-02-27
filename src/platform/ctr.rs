@@ -21,12 +21,12 @@ use crate::render::context::Line2d;
 use super::{Buttons, Controls, Platform};
 
 static KEY_MAPPING: [ctru::services::hid::KeyPad; 7] = [
-    ctru::services::hid::KeyPad::KEY_UP,
-    ctru::services::hid::KeyPad::KEY_DOWN,
-    ctru::services::hid::KeyPad::KEY_LEFT,
-    ctru::services::hid::KeyPad::KEY_RIGHT,
+    ctru::services::hid::KeyPad::KEY_DUP,
+    ctru::services::hid::KeyPad::KEY_DDOWN,
+    ctru::services::hid::KeyPad::KEY_DLEFT,
+    ctru::services::hid::KeyPad::KEY_DRIGHT,
     ctru::services::hid::KeyPad::KEY_B,
-    ctru::services::hid::KeyPad::KEY_A,
+    ctru::services::hid::KeyPad::KEY_Y,
     ctru::services::hid::KeyPad::KEY_START,
 ];
 

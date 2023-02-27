@@ -220,10 +220,6 @@ impl Platform for WebPlatform {
         }
     }
 
-    fn should_run(&self) -> bool {
-        true
-    }
-
     fn time_msec(&self) -> u64 {
         self.performance.now() as _
     }

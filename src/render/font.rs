@@ -24,8 +24,6 @@ struct Glyph {
     lines: Vec<(u8, u8)>,
 }
 
-const GLYPH_SPACING: f32 = 5.0;
-
 impl Glyph {
     fn load(asset: &mut Asset) -> Option<Glyph> {
         let ranges = asset.read_byte()?;
@@ -67,6 +65,8 @@ pub struct Font {
 }
 
 impl Font {
+    pub const GLYPH_SPACING: f32 = 5.0;
+
     pub fn new() -> Option<Self> {
         let mut asset = Asset::load("font.bin")?;
         let mut glyphs = vec![];
@@ -85,7 +85,23 @@ impl Font {
                     glyph.render(context, x, y, scale);
                 }
             }
-            x += GLYPH_SPACING * scale;
+            x += Self::GLYPH_SPACING * scale;
         }
+    }
+
+    pub fn write_centered(
+        &self,
+        context: &mut dyn RenderContext,
+        x: f32,
+        y: f32,
+        scale: f32,
+        s: &str,
+    ) {
+        if s.is_empty() {
+            return;
+        }
+
+        let x = x - (Self::GLYPH_SPACING * (s.len() as f32) - 1.0) * (scale * 0.5);
+        self.write(context, x, y, scale, s);
     }
 }
