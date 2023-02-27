@@ -14,13 +14,13 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+pub mod pause;
 pub mod race;
 pub mod title;
 
 use crate::{
-    linalg::Vector,
-    platform::{Buttons, Controls, Frame},
-    render::Renderer,
+    platform::{Buttons, Controls},
+    render::{context::RenderContext, Font},
     vehicle::garage::Garage,
 };
 
@@ -32,19 +32,16 @@ pub struct GlobalGameData {
     pub pressed: Buttons,
     /// The vehicle models.
     pub garage: Garage,
-    /// The renderer.
-    pub renderer: Renderer,
+    /// The font.
+    pub font: Font,
 }
 
 /// A game mode.
 pub trait Mode {
     /// Update the state. If a new mode is to be transitioned to, then returns
     /// the new mode to replace this with, which should have the same lifetime.
-    fn tick(&mut self, data: &GlobalGameData) -> Option<Box<dyn Mode>>;
-
-    /// Get the camera to render with.
-    fn camera(&self, interp: f32) -> (Vector, Vector, Vector);
+    fn tick(self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode>;
 
     /// Render this mode.
-    fn render(&self, interp: f32, data: &GlobalGameData, frame: &mut Frame);
+    fn render(&self, interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext);
 }

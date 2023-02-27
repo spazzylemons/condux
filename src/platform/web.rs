@@ -16,7 +16,9 @@
 
 use std::{cell::Cell, rc::Rc};
 
-use super::{Buttons, Controls, Line, Platform};
+use crate::render::context::Line2d;
+
+use super::{Buttons, Controls, Platform};
 
 use wasm_bindgen::prelude::*;
 
@@ -226,7 +228,7 @@ impl Platform for WebPlatform {
         self.performance.now() as _
     }
 
-    fn end_frame(&mut self, lines: &[Line]) {
+    fn end_frame(&mut self, lines: &[Line2d]) {
         // clear screen with black
         self.ctx
             .set_fill_style(&wasm_bindgen::JsValue::from_str("black"));

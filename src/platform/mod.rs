@@ -16,18 +16,7 @@
 
 use bitflags::bitflags;
 
-pub type Point = (f32, f32);
-pub type Line = (Point, Point);
-
-pub struct GenericFrame<'a, P>
-where
-    P: Platform,
-{
-    lines: Vec<Line>,
-    pub platform: &'a mut P,
-}
-
-pub type Frame<'a> = GenericFrame<'a, Impl>;
+use crate::render::context::{GenericBaseContext, Line2d};
 
 bitflags! {
     #[derive(Default)]
@@ -48,16 +37,6 @@ pub struct Controls {
     pub steering: f32,
 }
 
-impl<'a> Frame<'a> {
-    pub fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
-        self.lines.push(((x0, y0), (x1, y1)));
-    }
-
-    pub fn finish(self) {
-        self.platform.end_frame(&self.lines);
-    }
-}
-
 pub trait Platform {
     fn init(preferred_width: u16, preferred_height: u16) -> Self
     where
@@ -67,17 +46,14 @@ pub trait Platform {
 
     fn time_msec(&self) -> u64;
 
-    fn start_frame(&mut self) -> GenericFrame<'_, Self>
+    fn start_frame(&mut self) -> GenericBaseContext<'_, Self>
     where
         Self: Sized,
     {
-        GenericFrame::<'_, Self> {
-            lines: vec![],
-            platform: self,
-        }
+        GenericBaseContext::<'_, Self>::new(self)
     }
 
-    fn end_frame(&mut self, lines: &[Line]);
+    fn end_frame(&mut self, lines: &[Line2d]);
 
     fn width(&self) -> u16;
 

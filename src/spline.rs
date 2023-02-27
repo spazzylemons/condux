@@ -20,8 +20,7 @@ use crate::{
     assets::Asset,
     linalg::{Length, Mtx, Vector},
     octree::Octree,
-    platform::Frame,
-    render::Renderer,
+    render::context::RenderContext3d,
     vehicle::Vehicle,
 };
 
@@ -374,13 +373,7 @@ impl Spline {
         }
     }
 
-    fn render_spline_segment(
-        &self,
-        renderer: &Renderer,
-        frame: &mut Frame,
-        index: usize,
-        walls: bool,
-    ) {
+    fn render_spline_segment(&self, context: &mut RenderContext3d, index: usize, walls: bool) {
         // avoid modulus for efficiency
         let mut other_index = index + 1;
         if other_index == self.render_floor.len() {
@@ -389,21 +382,21 @@ impl Spline {
         // get floor points
         let (l1, r1) = self.render_floor[index];
         let (l2, r2) = self.render_floor[other_index];
-        renderer.line(l1, l2, frame);
-        renderer.line(r1, r2, frame);
-        renderer.line(l1, r1, frame);
+        context.line(l1, l2);
+        context.line(r1, r2);
+        context.line(l1, r1);
         if walls {
             // get wall points
             let (wl1, wr1) = self.render_walls[index];
             let (wl2, wr2) = self.render_walls[other_index];
-            renderer.line(l1, wl1, frame);
-            renderer.line(r1, wr1, frame);
-            renderer.line(wl1, wl2, frame);
-            renderer.line(wr1, wr2, frame);
+            context.line(l1, wl1);
+            context.line(r1, wr1);
+            context.line(wl1, wl2);
+            context.line(wr1, wr2);
         }
     }
 
-    pub fn render(&self, renderer: &Renderer, frame: &mut Frame, walls: bool) {
+    pub fn render(&self, context: &mut RenderContext3d, walls: bool) {
         // in case no points loaded, don't draw
         if self.render_floor.is_empty() {
             return;
@@ -412,7 +405,7 @@ impl Spline {
         // TODO precalculate all lines and render in a tight loop
         // when the wall code is more solidified
         for i in 0..self.render_floor.len() {
-            self.render_spline_segment(renderer, frame, i, walls);
+            self.render_spline_segment(context, i, walls);
         }
     }
 }

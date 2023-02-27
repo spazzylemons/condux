@@ -18,6 +18,7 @@
 
 use mode::{title::TitleMode, GlobalGameData, Mode};
 
+use render::Font;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -55,7 +56,7 @@ impl Game {
         let platform = platform::Impl::init(640, 480);
         let mut data = GlobalGameData::default();
         data.garage.load_hardcoded();
-        data.renderer.load_glyphs();
+        data.font = Font::new().unwrap();
         let timer = Timer::new(&platform);
 
         Self {
@@ -82,24 +83,41 @@ impl Game {
         self.data.controls = controls;
     }
 
-    fn iteration(&mut self) {
+    fn iteration(mut self) -> Self {
         self.update_controls();
         // update game state
         let (mut i, interp) = self.timer.frame_ticks(&self.platform);
         while i > 0 {
             i -= 1;
-            if let Some(new_mode) = self.mode.tick(&self.data) {
-                self.mode = new_mode;
-            }
+            self.mode = self.mode.tick(&self.data);
             // clear pressed buttons to avoid triggering stuff if we need to run multiple frames
             self.data.pressed = Buttons::empty();
         }
         // render frame
-        let mut frame = self.platform.start_frame();
-        let (eye, at, up) = self.mode.camera(interp);
-        self.data.renderer.set_camera(eye, at, up);
-        self.mode.render(interp, &self.data, &mut frame);
-        frame.finish();
+        let mut context = self.platform.start_frame();
+        self.mode.render(interp, &self.data, &mut context);
+        context.finish();
+        self
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+use std::{cell::RefCell, rc::Rc};
+
+/// Runs a frame using requestAnimationFrame.
+#[cfg(target_arch = "wasm32")]
+fn create_closure(keep_alive: Rc<RefCell<Closure<dyn FnMut()>>>, game: Game) -> impl FnOnce() {
+    move || {
+        if game.should_run() {
+            // iterate game
+            let game = game.iteration();
+            // create new closure to run
+            let closure = create_closure(keep_alive.clone(), game);
+            // store in keey_alive to prevent it from being dropped
+            keep_alive.replace(Closure::once(closure));
+            // call this closure on next animation frame
+            request_animation_frame(&keep_alive.borrow());
+        }
     }
 }
 
@@ -108,27 +126,16 @@ pub fn run_game() {
     {
         let mut game = Game::init();
         while game.should_run() {
-            game.iteration();
+            game = game.iteration();
         }
     }
 
     #[cfg(target_arch = "wasm32")]
     {
-        use std::{cell::RefCell, rc::Rc};
-
-        let f = Rc::new(RefCell::new(None));
-        let g = f.clone();
-
-        let mut game = Game::init();
-
-        *g.borrow_mut() = Some(Closure::new(move || {
-            if game.should_run() {
-                game.iteration();
-                request_animation_frame(f.borrow().as_ref().unwrap());
-            }
-        }));
-
-        request_animation_frame(g.borrow().as_ref().unwrap());
+        // keeps the closure alive
+        let keep_alive = Rc::new(RefCell::new(Closure::once(|| ())));
+        // runs the infinite loop
+        create_closure(keep_alive.clone(), Game::init())();
     }
 }
 

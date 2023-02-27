@@ -14,25 +14,9 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::render::context::RenderContext;
+pub mod context;
+pub mod font;
+pub mod mesh;
 
-use super::{race::RaceMode, GlobalGameData, Mode};
-
-pub struct TitleMode;
-
-impl Mode for TitleMode {
-    fn tick(self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode> {
-        if !data.pressed.is_empty() {
-            // transition to race
-            Box::new(RaceMode::initialized(&data.garage))
-        } else {
-            self
-        }
-    }
-
-    fn render(&self, _interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
-        // draw some text
-        data.font
-            .write(context, 4.0, 30.0, 4.0, "press any button to start");
-    }
-}
+pub use font::Font;
+pub use mesh::Mesh;

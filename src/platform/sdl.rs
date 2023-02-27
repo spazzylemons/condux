@@ -18,7 +18,9 @@ use sdl2::event::Event;
 
 use std::time::Instant;
 
-use super::{Buttons, Controls, Line, Platform};
+use crate::render::context::Line2d;
+
+use super::{Buttons, Controls, Platform};
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::style)]
@@ -139,7 +141,7 @@ impl Platform for SdlPlatform {
             .expect("you've been running the game too long!")
     }
 
-    fn end_frame(&mut self, lines: &[Line]) {
+    fn end_frame(&mut self, lines: &[Line2d]) {
         unsafe {
             // clear screen
             gl::Clear(gl::COLOR_BUFFER_BIT);

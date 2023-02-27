@@ -15,17 +15,18 @@
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::{
+    assets::Asset,
     linalg::{Length, Mtx, Quat, Vector},
     mode::Mode,
     octree::Octree,
-    platform::{Buttons, Controls, Frame},
-    render::Renderer,
+    platform::{Buttons, Controls},
+    render::context::{RenderContext, RenderContext3d},
     spline::Spline,
     util::{Approach, Interpolate},
-    vehicle::{garage::Garage, Controller, Vehicle},
+    vehicle::{garage::Garage, AIController, Controller, PlayerController, Vehicle},
 };
 
-use super::GlobalGameData;
+use super::{pause::PauseMode, GlobalGameData};
 
 const CAMERA_FOLLOW_DISTANCE: f32 = 2.5;
 const CAMERA_APPROACH_SPEED: f32 = 2.0;
@@ -70,9 +71,9 @@ impl VehicleState {
         (pos, rot_quat.into())
     }
 
-    fn render(&self, interp: f32, garage: &Garage, renderer: &Renderer, frame: &mut Frame) {
+    fn render(&self, interp: f32, garage: &Garage, context: &mut RenderContext3d) {
         let (pos, rot) = self.interpolate(interp);
-        self.vehicle.render(garage, renderer, pos, rot, frame);
+        self.vehicle.render(garage, context, pos, rot);
     }
 
     /// Returns true if the vehicle was respawned.
@@ -198,6 +199,27 @@ impl RaceMode {
         }
     }
 
+    #[must_use]
+    pub fn initialized(garage: &Garage) -> Self {
+        let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
+        let octree = Octree::new(&spline);
+        let mut mode = Self::new(spline, octree, 0);
+        // spawn player
+        let spawn = mode.spline.get_baked(0.0);
+        let model = garage.get_id("default").unwrap();
+        mode.spawn(spawn, model, Box::new(PlayerController::default()));
+        // spawn some other vehicles
+        let spawn = mode.spline.get_baked(5.0);
+        mode.spawn(spawn, model, Box::new(AIController::default()));
+        let spawn = mode.spline.get_baked(10.0);
+        mode.spawn(spawn, model, Box::new(AIController::default()));
+        let spawn = mode.spline.get_baked(15.0);
+        mode.spawn(spawn, model, Box::new(AIController::default()));
+        // set camera behind player
+        mode.teleport_camera();
+        mode
+    }
+
     pub fn spawn(&mut self, pos: Vector, model_id: u16, controller: Box<dyn Controller>) {
         self.vehicle_states
             .push(VehicleState::new(pos, model_id, controller));
@@ -226,9 +248,10 @@ impl RaceMode {
 }
 
 impl Mode for RaceMode {
-    fn tick(&mut self, data: &GlobalGameData) -> Option<Box<dyn Mode>> {
+    fn tick(mut self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode> {
         if data.pressed.contains(Buttons::PAUSE) {
-            self.walls = !self.walls;
+            // return paused
+            return Box::new(PauseMode::new(self));
         }
         // check all vehicles that may need to respawn
         let mut need_to_reset_camera = false;
@@ -304,11 +327,10 @@ impl Mode for RaceMode {
         }
         // now, run camera logic
         self.update_camera_pos();
-        // no mode transition implemented yet
-        None
+        self
     }
 
-    fn camera(&self, interp: f32) -> (Vector, Vector, Vector) {
+    fn render(&self, interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
         let interp_camera_pos = self.prev_camera.pos.interpolate(self.camera.pos, interp);
         let interp_camera_target = self
             .prev_camera
@@ -316,21 +338,24 @@ impl Mode for RaceMode {
             .interpolate(self.camera.target, interp);
         let interp_camera_up = self.prev_camera.up.interpolate(self.camera.up, interp);
 
-        (interp_camera_pos, interp_camera_target, interp_camera_up)
-    }
+        let mut context_3d = RenderContext3d::new(
+            context,
+            interp_camera_pos,
+            interp_camera_target,
+            interp_camera_up,
+        );
 
-    fn render(&self, interp: f32, data: &GlobalGameData, frame: &mut Frame) {
         for state in &self.vehicle_states {
-            state.render(interp, &data.garage, &data.renderer, frame);
+            state.render(interp, &data.garage, &mut context_3d);
         }
 
-        self.spline.render(&data.renderer, frame, self.walls);
+        self.spline.render(&mut context_3d, self.walls);
 
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[self.camera_focus].vehicle;
             let speed = vehicle.signed_speed();
-            data.renderer
-                .write(6.0, 18.0, 2.0, frame, &format!("SPEED {:.2}", speed));
+            data.font
+                .write(context, 6.0, 18.0, 2.0, &format!("SPEED {:.2}", speed));
         }
     }
 }

@@ -16,7 +16,9 @@
 
 use ctru::prelude::*;
 
-use super::{Buttons, Controls, Line, Platform};
+use crate::render::context::Line2d;
+
+use super::{Buttons, Controls, Platform};
 
 static KEY_MAPPING: [ctru::services::hid::KeyPad; 7] = [
     ctru::services::hid::KeyPad::KEY_UP,
@@ -140,7 +142,7 @@ impl Platform for CitroPlatform {
         unsafe { ctru_sys::osGetTime() }
     }
 
-    fn end_frame(&mut self, lines: &[Line]) {
+    fn end_frame(&mut self, lines: &[Line2d]) {
         unsafe {
             citro3d_sys::C3D_FrameBegin(citro3d_sys::C3D_FRAME_SYNCDRAW as u8);
             citro2d_sys::C2D_TargetClear(self.target, 0xff_00_00_00);

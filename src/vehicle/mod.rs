@@ -17,8 +17,8 @@
 use crate::{
     linalg::{Length, Mtx, Quat, Vector},
     octree::Octree,
-    platform::{Buttons, Controls, Frame},
-    render::{Mesh, Renderer},
+    platform::{Buttons, Controls},
+    render::{context::RenderContext3d, Mesh},
     spline::Spline,
     timing::TICK_DELTA,
     util::Approach,
@@ -329,16 +329,9 @@ impl Vehicle {
         v.mag().copysign(v.dot(&f))
     }
 
-    pub fn render(
-        &self,
-        garage: &Garage,
-        renderer: &Renderer,
-        pos: Vector,
-        rot: Mtx,
-        frame: &mut Frame,
-    ) {
+    pub fn render(&self, garage: &Garage, context: &mut RenderContext3d, pos: Vector, rot: Mtx) {
         if let Some(model) = garage.get_model(self.model_id) {
-            model.mesh.render(renderer, pos, rot, frame);
+            model.mesh.render(context, pos, rot);
         }
     }
 }
