@@ -58,7 +58,7 @@ impl Mode for PauseMode {
         context.line(menu_start, 0.0, menu_start, height);
         // draw "PAUSED" text
         data.font
-            .write(context, menu_start + 8.0, 8.0 + 4.0 * 6.0, 4.0, "PAUSED");
+            .write(context, menu_start + 8.0, 8.0, 4.0, "PAUSED");
         // options will be implemented later
     }
 }

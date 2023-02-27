@@ -54,8 +54,8 @@ impl Glyph {
             let (x1, y1) = self.points[*j as usize];
             let x0 = x + f32::from(x0) * scale;
             let x1 = x + f32::from(x1) * scale;
-            let y0 = y - f32::from(y0) * scale;
-            let y1 = y - f32::from(y1) * scale;
+            let y0 = y + f32::from(y0) * scale;
+            let y1 = y + f32::from(y1) * scale;
             context.line(x0, y0, x1, y1);
         }
     }

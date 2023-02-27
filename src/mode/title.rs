@@ -33,6 +33,6 @@ impl Mode for TitleMode {
     fn render(&self, _interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
         // draw some text
         data.font
-            .write(context, 4.0, 30.0, 4.0, "press any button to start");
+            .write(context, 4.0, 4.0, 4.0, "press any button to start");
     }
 }

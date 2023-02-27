@@ -104,7 +104,7 @@ class FontExport(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
                     for vertex in mesh.vertices:
                         # write as integers
                         x = round(vertex.co.x)
-                        y = round(vertex.co.y)
+                        y = round(-vertex.co.y)
                         assert 0 <= x <= 15
                         assert 0 <= y <= 15
                         file.write(bytes([x | (y << 4)]))

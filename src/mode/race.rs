@@ -355,7 +355,7 @@ impl Mode for RaceMode {
             let vehicle = &self.vehicle_states[self.camera_focus].vehicle;
             let speed = vehicle.signed_speed();
             data.font
-                .write(context, 6.0, 18.0, 2.0, &format!("SPEED {:.2}", speed));
+                .write(context, 6.0, 6.0, 2.0, &format!("SPEED {:.2}", speed));
         }
     }
 }
