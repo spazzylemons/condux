@@ -305,18 +305,6 @@ pub struct Mtx {
 }
 
 impl Mtx {
-    pub const IDENT: Self = Self {
-        xx: 1.0,
-        xy: 0.0,
-        xz: 0.0,
-        yx: 0.0,
-        yy: 1.0,
-        yz: 0.0,
-        zx: 0.0,
-        zy: 0.0,
-        zz: 1.0,
-    };
-
     #[must_use]
     pub fn transposed(mut self) -> Self {
         std::mem::swap(&mut self.yx, &mut self.xy);
