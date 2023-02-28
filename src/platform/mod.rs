@@ -16,7 +16,7 @@
 
 use bitflags::bitflags;
 
-use crate::render::context::{GenericBaseContext, Line2d};
+use crate::render::context::GenericBaseContext;
 
 bitflags! {
     #[derive(Default)]
@@ -54,7 +54,9 @@ pub trait Platform {
         GenericBaseContext::<'_, Self>::new(self)
     }
 
-    fn end_frame(&mut self, lines: &[Line2d]);
+    fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32);
+
+    fn end_frame(&mut self);
 
     fn width(&self) -> u16;
 

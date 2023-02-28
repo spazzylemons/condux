@@ -16,9 +16,7 @@
 
 use sdl2::event::Event;
 
-use std::time::Instant;
-
-use crate::render::context::Line2d;
+use std::{ffi::CString, time::Instant};
 
 use super::{Buttons, Controls, Platform};
 
@@ -27,6 +25,256 @@ use super::{Buttons, Controls, Platform};
 #[allow(clippy::pedantic)]
 mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
+}
+
+struct Shader {
+    id: gl::types::GLuint,
+}
+
+impl Shader {
+    fn new(ty: gl::types::GLenum) -> Self {
+        Self {
+            id: unsafe { gl::CreateShader(ty) },
+        }
+    }
+
+    fn source(&self, source: &str) {
+        let strings = [source.as_ptr() as *const gl::types::GLchar];
+        let lengths = [source.len() as gl::types::GLint];
+        unsafe {
+            gl::ShaderSource(self.id, 1, strings.as_ptr(), lengths.as_ptr());
+        }
+    }
+
+    fn compile(&self) -> Result<(), String> {
+        unsafe {
+            gl::CompileShader(self.id);
+            // check success of the compilation
+            let mut success: gl::types::GLint = 0;
+            gl::GetShaderiv(
+                self.id,
+                gl::COMPILE_STATUS,
+                &mut success as *mut gl::types::GLint,
+            );
+            if success == 0 {
+                let mut length: gl::types::GLint = 0;
+                gl::GetShaderiv(
+                    self.id,
+                    gl::INFO_LOG_LENGTH,
+                    &mut length as *mut gl::types::GLint,
+                );
+                let mut buffer = vec![0u8; length as usize];
+                gl::GetShaderInfoLog(
+                    self.id,
+                    length,
+                    std::ptr::null_mut(),
+                    buffer.as_mut_ptr() as *mut gl::types::GLchar,
+                );
+                // drop null terminator
+                buffer.pop();
+                Err(String::from_utf8(buffer).unwrap_or_else(|_| String::from("GL error")))
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Drop for Shader {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteShader(self.id);
+        }
+    }
+}
+
+struct Program {
+    id: gl::types::GLuint,
+}
+
+impl Program {
+    fn new() -> Self {
+        Self {
+            id: unsafe { gl::CreateProgram() },
+        }
+    }
+
+    fn attach(&self, shader: &Shader) {
+        unsafe {
+            gl::AttachShader(self.id, shader.id);
+        }
+    }
+
+    fn link(&self) -> Result<(), String> {
+        unsafe {
+            gl::LinkProgram(self.id);
+            // check success of the compilation
+            let mut success: gl::types::GLint = 0;
+            gl::GetProgramiv(
+                self.id,
+                gl::LINK_STATUS,
+                &mut success as *mut gl::types::GLint,
+            );
+            if success == 0 {
+                let mut length: gl::types::GLint = 0;
+                gl::GetProgramiv(
+                    self.id,
+                    gl::INFO_LOG_LENGTH,
+                    &mut length as *mut gl::types::GLint,
+                );
+                let mut buffer = vec![0u8; length as usize];
+                gl::GetProgramInfoLog(
+                    self.id,
+                    length,
+                    std::ptr::null_mut(),
+                    buffer.as_mut_ptr() as *mut gl::types::GLchar,
+                );
+                // drop null terminator
+                buffer.pop();
+                Err(String::from_utf8(buffer).unwrap_or_else(|_| String::from("GL error")))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    fn use_program(&self) {
+        unsafe {
+            gl::UseProgram(self.id);
+        }
+    }
+
+    fn get_uniform(&self, name: &str) -> Option<Uniform> {
+        if let Ok(cstr) = CString::new(name) {
+            let location = unsafe { gl::GetUniformLocation(self.id, cstr.as_ptr()) };
+            if location == -1 {
+                None
+            } else {
+                Some(Uniform { location })
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for Program {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteProgram(self.id);
+        }
+    }
+}
+
+struct VAO {
+    id: gl::types::GLuint,
+}
+
+impl VAO {
+    fn new() -> Self {
+        let mut id: gl::types::GLuint = 0;
+        unsafe {
+            gl::GenVertexArrays(1, &mut id);
+        }
+        Self { id }
+    }
+
+    fn bind(&self) {
+        unsafe {
+            gl::BindVertexArray(self.id);
+        }
+    }
+
+    fn enable(index: gl::types::GLuint) {
+        unsafe {
+            gl::EnableVertexAttribArray(index);
+        }
+    }
+
+    fn attrib_ptr(
+        index: gl::types::GLuint,
+        size: gl::types::GLint,
+        ty: gl::types::GLenum,
+        normalized: bool,
+        stride: gl::types::GLsizei,
+        offset: usize,
+    ) {
+        unsafe {
+            gl::VertexAttribPointer(
+                index,
+                size,
+                ty,
+                normalized.into(),
+                stride,
+                std::mem::transmute(offset),
+            );
+        }
+    }
+}
+
+impl Drop for VAO {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteVertexArrays(1, &self.id);
+        }
+    }
+}
+
+struct VBO {
+    id: gl::types::GLuint,
+}
+
+impl VBO {
+    fn new() -> Self {
+        let mut id: gl::types::GLuint = 0;
+        unsafe {
+            gl::GenBuffers(1, &mut id);
+        }
+        Self { id }
+    }
+
+    fn bind(&self, target: gl::types::GLenum) {
+        unsafe {
+            gl::BindBuffer(target, self.id);
+        }
+    }
+
+    fn data<T>(target: gl::types::GLenum, ptr: &[T], usage: gl::types::GLenum) {
+        unsafe {
+            gl::BufferData(
+                target,
+                (std::mem::size_of::<T>() * ptr.len()) as _,
+                ptr.as_ptr() as *const std::ffi::c_void,
+                usage,
+            );
+        }
+    }
+}
+
+impl Drop for VBO {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteBuffers(1, &self.id);
+        }
+    }
+}
+
+struct Uniform {
+    location: gl::types::GLint,
+}
+
+impl Uniform {
+    fn vec2(&self, x: f32, y: f32) {
+        unsafe {
+            gl::Uniform2f(self.location, x, y);
+        }
+    }
+}
+
+fn draw_arrays(mode: gl::types::GLenum, start: gl::types::GLsizei, count: gl::types::GLsizei) {
+    unsafe {
+        gl::DrawArrays(mode, start, count);
+    }
 }
 
 pub struct SdlPlatform {
@@ -45,6 +293,17 @@ pub struct SdlPlatform {
     keyboard_buttons: Buttons,
 
     controller: Option<sdl2::controller::GameController>,
+
+    /// Buffered points.
+    points: Vec<f32>,
+    /// Viewport shader uniform.
+    viewport: Uniform,
+    /// Active OpenGL shader program.
+    _program: Program,
+    /// Active vertex array object.
+    _vao: VAO,
+    /// Active vertex buffer object.
+    _vbo: VBO,
 }
 
 static KEYBOARD_MAPPING: [sdl2::keyboard::Keycode; 7] = [
@@ -76,19 +335,6 @@ fn get_keycode_bitmask(keycode: sdl2::keyboard::Keycode) -> Buttons {
     Buttons::empty()
 }
 
-impl SdlPlatform {
-    fn point(&self, x: f32, y: f32) {
-        // convert to [-1, 1]
-        let width = f32::from(self.width());
-        let height = f32::from(self.height());
-        let x = (x / (width * 0.5)) + ((1.0 - width) / width);
-        let y = -((y / (height * 0.5)) + ((1.0 - height) / height));
-        unsafe {
-            gl::Vertex2f(x, y);
-        }
-    }
-}
-
 impl Platform for SdlPlatform {
     fn init(preferred_width: u16, preferred_height: u16) -> Self {
         let ctx = sdl2::init().unwrap();
@@ -106,9 +352,36 @@ impl Platform for SdlPlatform {
         let controller_ctx = ctx.game_controller().unwrap();
         let event_pump = ctx.event_pump().unwrap();
 
+        let vertex = Shader::new(gl::VERTEX_SHADER);
+        vertex.source(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shader/vertex.glsl"
+        )));
+        vertex.compile().unwrap();
+        let fragment = Shader::new(gl::FRAGMENT_SHADER);
+        fragment.source(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shader/fragment.glsl"
+        )));
+        fragment.compile().unwrap();
+
+        let program = Program::new();
+        program.attach(&vertex);
+        program.attach(&fragment);
+        program.link().unwrap();
+        program.use_program();
+
+        let vao = VAO::new();
+        let vbo = VBO::new();
+
+        vao.bind();
+        vbo.bind(gl::ARRAY_BUFFER);
+
+        VAO::attrib_ptr(0, 2, gl::FLOAT, false, 0, 0);
+        VAO::enable(0);
+
         unsafe {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            gl::Color3f(1.0, 1.0, 1.0);
         }
 
         Self {
@@ -126,6 +399,12 @@ impl Platform for SdlPlatform {
             keyboard_buttons: Buttons::empty(),
 
             controller: None,
+
+            points: vec![],
+            viewport: program.get_uniform("viewport").unwrap(),
+            _program: program,
+            _vao: vao,
+            _vbo: vbo,
         }
     }
 
@@ -141,22 +420,30 @@ impl Platform for SdlPlatform {
             .expect("you've been running the game too long!")
     }
 
-    fn end_frame(&mut self, lines: &[Line2d]) {
+    fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        self.points.push(x0);
+        self.points.push(y0);
+        self.points.push(x1);
+        self.points.push(y1);
+    }
+
+    fn end_frame(&mut self) {
         unsafe {
             // clear screen
             gl::Clear(gl::COLOR_BUFFER_BIT);
-            // begin drawing lines
-            gl::Begin(gl::LINES);
         }
-        // draw the lines
-        for ((x0, y0), (x1, y1)) in lines {
-            self.point(*x0, *y0);
-            self.point(*x1, *y1);
-        }
-        // finish frame
-        unsafe {
-            gl::End();
-        }
+
+        // send viewport to shader
+        self.viewport.vec2(self.width.into(), self.height.into());
+        // load points into buffer
+        VBO::data(gl::ARRAY_BUFFER, &self.points, gl::STATIC_DRAW);
+        let num_points = self.points.len() / 2;
+        // clear local point buffer
+        self.points.clear();
+        // use array buffer to draw lines
+        draw_arrays(gl::LINES, 0, num_points as _);
+        // use it again to connect them
+        draw_arrays(gl::POINTS, 0, num_points as _);
         // swap buffers
         self.window.gl_swap_window();
         // accept events

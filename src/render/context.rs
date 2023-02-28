@@ -34,7 +34,6 @@ pub struct GenericBaseContext<'a, P>
 where
     P: Platform,
 {
-    lines: Vec<Line2d>,
     platform: &'a mut P,
 }
 
@@ -43,14 +42,11 @@ where
     P: Platform + Sized,
 {
     pub fn new(platform: &'a mut P) -> Self {
-        Self {
-            lines: vec![],
-            platform,
-        }
+        Self { platform }
     }
 
     pub fn finish(self) {
-        self.platform.end_frame(&self.lines);
+        self.platform.end_frame();
     }
 }
 
@@ -59,7 +55,7 @@ where
     P: Platform,
 {
     fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
-        self.lines.push(((x0, y0), (x1, y1)));
+        self.platform.buffer_line(x0, y0, x1, y1);
     }
 
     fn width(&self) -> u16 {
@@ -96,7 +92,7 @@ impl<'a> ScissorContext<'a> {
         }
     }
 
-    fn clip(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(Point2d, Point2d)> {
+    fn clip(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> Option<Line2d> {
         // liang-barsky
         let dx = x1 - x0;
         let dy = y1 - y0;

@@ -105,6 +105,8 @@ pub struct WebPlatform {
     pause_press: Rc<Cell<bool>>,
     /// element to show for gamepad mapping note
     gamepad_mapping_note: web_sys::Element,
+    /// Lines to draw.
+    lines: Vec<Line2d>,
     /// Reference to keydown event listener
     _key_down: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     /// Reference to keyup event listener
@@ -213,6 +215,7 @@ impl Platform for WebPlatform {
             virtual_analog: TouchElement::new("virtual-analog", &document),
             pause_press,
             gamepad_mapping_note,
+            lines: vec![],
 
             _key_down: key_down,
             _key_up: key_up,
@@ -224,7 +227,11 @@ impl Platform for WebPlatform {
         self.performance.now() as _
     }
 
-    fn end_frame(&mut self, lines: &[Line2d]) {
+    fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        self.lines.push(((x0, y0), (x1, y1)));
+    }
+
+    fn end_frame(&mut self) {
         // clear screen with black
         self.ctx
             .set_fill_style(&wasm_bindgen::JsValue::from_str("black"));
@@ -238,13 +245,14 @@ impl Platform for WebPlatform {
         self.ctx.set_line_width(1.0);
         self.ctx
             .set_stroke_style(&wasm_bindgen::JsValue::from_str("white"));
-        for ((x0, y0), (x1, y1)) in lines {
+        for ((x0, y0), (x1, y1)) in &self.lines {
             self.ctx.begin_path();
             // add 0.5 for less blurry text
             self.ctx.move_to((*x0 + 0.5).into(), (*y0 + 0.5).into());
             self.ctx.line_to((*x1 + 0.5).into(), (*y1 + 0.5).into());
             self.ctx.stroke();
         }
+        self.lines.clear();
     }
 
     fn width(&self) -> u16 {

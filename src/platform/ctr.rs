@@ -94,6 +94,7 @@ pub struct CitroPlatform {
     _gfx: Gfx,
     apt: Apt,
     target: *mut citro3d_sys::C3D_RenderTarget,
+    lines: Vec<Line2d>,
 }
 
 impl Drop for CitroPlatform {
@@ -131,6 +132,7 @@ impl Platform for CitroPlatform {
             _gfx: gfx,
             apt,
             target,
+            lines: vec![],
         }
     }
 
@@ -142,12 +144,16 @@ impl Platform for CitroPlatform {
         unsafe { ctru_sys::osGetTime() }
     }
 
-    fn end_frame(&mut self, lines: &[Line2d]) {
+    fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        self.lines.push(((x0, y0), (x1, y1)));
+    }
+
+    fn end_frame(&mut self) {
         unsafe {
             citro3d_sys::C3D_FrameBegin(citro3d_sys::C3D_FRAME_SYNCDRAW as u8);
             citro2d_sys::C2D_TargetClear(self.target, 0xff_00_00_00);
             citro2d_sys::C2D_SceneBegin(self.target);
-            for ((x0, y0), (x1, y1)) in lines {
+            for ((x0, y0), (x1, y1)) in &self.lines {
                 // it's not real line drawing as the PICA200 doesn't have a line
                 // primitive option - we add 0.5 to the coordinates to make it
                 // appear less blocky
@@ -162,6 +168,7 @@ impl Platform for CitroPlatform {
                     0.0,
                 );
             }
+            self.lines.clear();
             citro3d_sys::C3D_FrameEnd(0);
         }
     }
