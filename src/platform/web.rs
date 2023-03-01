@@ -178,15 +178,23 @@ impl Platform for WebPlatform {
         let keyboard_buttons_clone = keyboard_buttons.clone();
         let key_down =
             Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
-                let new_val = keyboard_buttons_clone.get() | get_keycode_bitmask(&event.key());
-                keyboard_buttons_clone.set(new_val);
+                let bitmask = get_keycode_bitmask(&event.key());
+                if !bitmask.is_empty() {
+                    event.prevent_default();
+                    let new_val = keyboard_buttons_clone.get() | bitmask;
+                    keyboard_buttons_clone.set(new_val);
+                }
             });
         // create keyup listener
         let keyboard_buttons_clone = keyboard_buttons.clone();
         let key_up =
             Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
-                let new_val = keyboard_buttons_clone.get() & !get_keycode_bitmask(&event.key());
-                keyboard_buttons_clone.set(new_val);
+                let bitmask = get_keycode_bitmask(&event.key());
+                if !bitmask.is_empty() {
+                    event.prevent_default();
+                    let new_val = keyboard_buttons_clone.get() & !bitmask;
+                    keyboard_buttons_clone.set(new_val);
+                }
             });
         // create pause button reference
         let pause_press = Rc::new(Cell::new(false));
