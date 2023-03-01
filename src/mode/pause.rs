@@ -16,10 +16,7 @@
 
 use crate::{
     platform::Buttons,
-    render::{
-        context::{RenderContext, ScissorContext},
-        Font,
-    },
+    render::{graph::RenderGraph, Font},
 };
 
 use super::{GlobalGameData, Mode};
@@ -125,32 +122,39 @@ impl Mode for PauseMode {
         self
     }
 
-    fn render(&self, _interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
-        let width = f32::from(context.width());
-        let height = f32::from(context.height());
-        let menu_start = width - Self::CLIP_WIDTH;
+    fn render(
+        &self,
+        _interp: f32,
+        data: &GlobalGameData,
+        graph: &mut RenderGraph,
+        width: u16,
+        height: u16,
+    ) {
+        let width_f32 = f32::from(width);
+        let height_f32 = f32::from(height);
+        let menu_start = width_f32 - Self::CLIP_WIDTH;
         // render what we've paused, clpping out the right side
         // note that pass in 1.0 for interpolation.
         // if we used the given interpolation, the scene would jitter between
         // the previous and current frame
-        let mut new_context = ScissorContext::new(context, 0.0, 0.0, menu_start, height);
-        self.contains.render(1.0, data, &mut new_context);
+        let mut new_graph = RenderGraph::default();
+        self.contains
+            .render(1.0, data, &mut new_graph, width, height);
+        graph.scissor(0.0, 0.0, menu_start, height_f32, new_graph);
         // divider line
-        context.line(menu_start, 0.0, menu_start, height);
+        graph.line(menu_start, 0.0, menu_start, height_f32);
         // draw "PAUSED" text
-        data.font
-            .write(context, menu_start + 16.0, 16.0, 4.0, "PAUSED");
+        graph.text(menu_start + 16.0, 16.0, 4.0, String::from("PAUSED"));
         // draw options
         let mut y = 64.0;
         for (i, option) in self.options.iter().enumerate() {
             let mut x = menu_start + 16.0;
             // show cursor where we're selecting
             if i == self.selected {
-                data.font.write(context, x, y, Self::OPTION_SCALE, ">");
+                graph.text(x, y, Self::OPTION_SCALE, String::from(">"));
                 x += Font::GLYPH_SPACING * 2.0 * Self::OPTION_SCALE;
             }
-            data.font
-                .write(context, x, y, Self::OPTION_SCALE, &option.name);
+            graph.text(x, y, Self::OPTION_SCALE, option.name.clone());
             y += Self::OPTION_SCALE * 8.0;
         }
     }

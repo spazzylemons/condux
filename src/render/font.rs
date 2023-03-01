@@ -88,20 +88,4 @@ impl Font {
             x += Self::GLYPH_SPACING * scale;
         }
     }
-
-    pub fn write_centered(
-        &self,
-        context: &mut dyn RenderContext,
-        x: f32,
-        y: f32,
-        scale: f32,
-        s: &str,
-    ) {
-        if s.is_empty() {
-            return;
-        }
-
-        let x = x - (Self::GLYPH_SPACING * (s.len() as f32) - 1.0) * (scale * 0.5);
-        self.write(context, x, y, scale, s);
-    }
 }

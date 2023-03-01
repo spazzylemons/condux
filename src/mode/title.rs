@@ -14,7 +14,7 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::{platform::Buttons, render::context::RenderContext};
+use crate::{platform::Buttons, render::graph::RenderGraph};
 
 use super::{race::RaceMode, GlobalGameData, Mode};
 
@@ -37,16 +37,20 @@ impl Mode for TitleMode {
         }
     }
 
-    fn render(&self, _interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
+    fn render(
+        &self,
+        _interp: f32,
+        _data: &GlobalGameData,
+        graph: &mut RenderGraph,
+        width: u16,
+        _height: u16,
+    ) {
         // draw some text
-        let center = f32::from(context.width()) * 0.5;
-        data.font
-            .write_centered(context, center, 32.0, 6.0, "CONDUX");
-        data.font
-            .write_centered(context, center, 120.0, 4.0, "Press OK to start");
+        let center = f32::from(width) * 0.5;
+        graph.text_centered(center, 32.0, 6.0, String::from("CONDUX"));
+        graph.text_centered(center, 120.0, 4.0, String::from("Press OK to start"));
 
         #[cfg(not(target_arch = "wasm32"))]
-        data.font
-            .write_centered(context, center, 160.0, 4.0, "Press Back to quit");
+        graph.text_centered(center, 160.0, 4.0, String::from("Press Back to quit"));
     }
 }

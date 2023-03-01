@@ -14,7 +14,7 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{assets::Asset, render::Mesh, vehicle::Model};
 
@@ -34,7 +34,7 @@ impl Garage {
             acceleration: 7.0,
             handling: 1.5,
             anti_drift: 12.0,
-            mesh,
+            mesh: Arc::new(mesh),
         };
         self.load("default".into(), model).unwrap();
     }

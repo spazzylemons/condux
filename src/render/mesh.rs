@@ -21,6 +21,7 @@ use crate::{
 
 use super::context::RenderContext3d;
 
+#[derive(Clone)]
 pub struct Mesh {
     vertices: Vec<Vector>,
     lines: Vec<(u8, u8)>,

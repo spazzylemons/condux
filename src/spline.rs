@@ -14,13 +14,16 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::f32::consts::{PI, TAU};
+use std::{
+    f32::consts::{PI, TAU},
+    sync::Arc,
+};
 
 use crate::{
     assets::Asset,
     linalg::{Length, Mtx, Vector},
     octree::Octree,
-    render::context::RenderContext3d,
+    render::graph::RenderGraph3d,
     vehicle::Vehicle,
 };
 
@@ -53,9 +56,9 @@ pub struct Spline {
     pub length: f32,
 
     /// The points to render for the floor.
-    render_floor: Vec<(Vector, Vector)>,
+    render_floor: Arc<Vec<(Vector, Vector)>>,
     /// The points to render for the walls.
-    render_walls: Vec<(Vector, Vector)>,
+    render_walls: Arc<Vec<(Vector, Vector)>>,
 }
 
 pub struct CollisionState {
@@ -139,8 +142,8 @@ impl Spline {
             total_tilt,
             length: 0.0,
 
-            render_floor: vec![],
-            render_walls: vec![],
+            render_floor: Arc::new(vec![]),
+            render_walls: Arc::new(vec![]),
         };
         // for each point, recursively find points to bake
         for i in 0..num_points {
@@ -358,54 +361,56 @@ impl Spline {
 
     fn prerender(&mut self) {
         let mut d = 0.0;
+        let mut render_floor = vec![];
+        let mut render_walls = vec![];
         while d < self.length {
             let p = self.get_baked(d);
             let (mut u, r) = self.get_up_right(d);
             let r = r * Self::TRACK_RADIUS;
             let mut pl = p - r;
             let mut pr = p + r;
-            self.render_floor.push((pl, pr));
+            render_floor.push((pl, pr));
             u *= Self::WALL_HEIGHT;
             pl += u;
             pr += u;
-            self.render_walls.push((pl, pr));
+            render_walls.push((pl, pr));
             d += 1.0;
         }
-    }
-
-    fn render_spline_segment(&self, context: &mut RenderContext3d, index: usize, walls: bool) {
-        // avoid modulus for efficiency
-        let mut other_index = index + 1;
-        if other_index == self.render_floor.len() {
-            other_index = 0;
-        }
-        // get floor points
-        let (l1, r1) = self.render_floor[index];
-        let (l2, r2) = self.render_floor[other_index];
-        context.line(l1, l2);
-        context.line(r1, r2);
-        context.line(l1, r1);
-        if walls {
-            // get wall points
-            let (wl1, wr1) = self.render_walls[index];
-            let (wl2, wr2) = self.render_walls[other_index];
-            context.line(l1, wl1);
-            context.line(r1, wr1);
-            context.line(wl1, wl2);
-            context.line(wr1, wr2);
-        }
-    }
-
-    pub fn render(&self, context: &mut RenderContext3d, walls: bool) {
         // in case no points loaded, don't draw
-        if self.render_floor.is_empty() {
+        if render_floor.is_empty() {
             return;
         }
 
-        // TODO precalculate all lines and render in a tight loop
-        // when the wall code is more solidified
-        for i in 0..self.render_floor.len() {
-            self.render_spline_segment(context, i, walls);
+        let mut my_render_floor = vec![];
+        let mut my_render_walls = vec![];
+        for index in 0..render_floor.len() {
+            // avoid modulus for efficiency
+            let mut other_index = index + 1;
+            if other_index == render_floor.len() {
+                other_index = 0;
+            }
+            // get floor points
+            let (l1, r1) = render_floor[index];
+            let (l2, r2) = render_floor[other_index];
+            my_render_floor.push((l1, l2));
+            my_render_floor.push((r1, r2));
+            my_render_floor.push((l1, r1));
+            // get wall points
+            let (wl1, wr1) = render_walls[index];
+            let (wl2, wr2) = render_walls[other_index];
+            my_render_walls.push((l1, wl1));
+            my_render_walls.push((r1, wr1));
+            my_render_walls.push((wl1, wl2));
+            my_render_walls.push((wr1, wr2));
+        }
+        self.render_floor = Arc::new(my_render_floor);
+        self.render_walls = Arc::new(my_render_walls);
+    }
+
+    pub fn render(&self, graph: &mut RenderGraph3d, walls: bool) {
+        graph.lines(self.render_floor.clone());
+        if walls {
+            graph.lines(self.render_walls.clone());
         }
     }
 }

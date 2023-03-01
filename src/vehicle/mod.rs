@@ -14,11 +14,13 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::sync::Arc;
+
 use crate::{
     linalg::{Length, Mtx, Quat, Vector},
     octree::Octree,
     platform::{Buttons, Controls},
-    render::{context::RenderContext3d, Mesh},
+    render::{graph::RenderGraph3d, Mesh},
     spline::Spline,
     timing::TICK_DELTA,
     util::Approach,
@@ -40,7 +42,7 @@ pub struct Model {
     pub acceleration: f32,
     pub handling: f32,
     pub anti_drift: f32,
-    pub mesh: Mesh,
+    pub mesh: Arc<Mesh>,
 }
 
 pub struct ControllerGuidance<'a> {
@@ -329,9 +331,9 @@ impl Vehicle {
         v.mag().copysign(v.dot(&f))
     }
 
-    pub fn render(&self, garage: &Garage, context: &mut RenderContext3d, pos: Vector, rot: Mtx) {
+    pub fn render(&self, garage: &Garage, graph: &mut RenderGraph3d, pos: Vector, rot: Mtx) {
         if let Some(model) = garage.get_model(self.model_id) {
-            model.mesh.render(context, pos, rot);
+            graph.mesh(pos, rot, model.mesh.clone());
         }
     }
 }

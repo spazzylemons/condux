@@ -18,7 +18,7 @@
 
 use mode::{title::TitleMode, GlobalGameData, Mode};
 
-use render::Font;
+use render::{context::GenericBaseContext, Font};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -33,53 +33,123 @@ mod timing;
 mod util;
 mod vehicle;
 
-use platform::{Buttons, Impl, Platform};
+use platform::{Buttons, Controls, Impl, Platform};
 
 const DEADZONE: f32 = 0.03;
 
-use crate::timing::Timer;
+use crate::{render::graph::RenderGraph, timing::Timer};
+
+/// Structure of game update for non-WASM targets.
+#[cfg(not(target_arch = "wasm32"))]
+struct GameUpdate {
+    /// Sends render graph
+    sender: std::sync::mpsc::SyncSender<RenderUpdate>,
+    /// Holds update data
+    receiver: std::sync::mpsc::Receiver<PlatformUpdate>,
+}
+
+/// Implementation of game update for non-WASM targets.
+#[cfg(not(target_arch = "wasm32"))]
+impl GameUpdate {
+    /// Sends the update.
+    fn send_update(&self, update: RenderUpdate) -> PlatformUpdate {
+        // send new update
+        self.sender.send(update).unwrap();
+        // receive new update
+        self.receiver.recv().unwrap()
+    }
+}
+
+/// Structure of game update for WASM target. Not multithreaded.
+#[cfg(target_arch = "wasm32")]
+struct GameUpdate {
+    /// Platform to use
+    platform: RefCell<Impl>,
+    /// The font to use
+    font: Font,
+}
+
+/// Implementation of game update for WASM target.
+#[cfg(target_arch = "wasm32")]
+impl GameUpdate {
+    fn send_update(&self, update: RenderUpdate) -> PlatformUpdate {
+        let mut platform = self.platform.borrow_mut();
+        let result = generate_update(&mut *platform);
+        match update {
+            RenderUpdate::Graph(graph) => {
+                let mut ctx = GenericBaseContext::new(&mut *platform);
+                graph.render(&self.font, &mut ctx);
+                ctx.finish();
+            }
+        }
+        result
+    }
+}
+
+/// Contains information sent from the render thread to the game thread.
+#[derive(Clone, Copy)]
+struct PlatformUpdate {
+    controls: Controls,
+    width: u16,
+    height: u16,
+    time_ms: u64,
+    #[cfg(not(target_arch = "wasm32"))]
+    should_run: bool,
+}
+
+/// Contains information sent from the game thread to the render thread.
+enum RenderUpdate {
+    /// Here is a scene to draw.
+    Graph(RenderGraph),
+    /// Game has ended
+    #[cfg(not(target_arch = "wasm32"))]
+    End,
+}
 
 struct Game {
-    /// Platform-specific interface.
-    platform: Impl,
     /// The game timer.
     timer: Timer,
     /// The game mode.
     mode: Box<dyn Mode>,
     /// The global game data.
     data: GlobalGameData,
+    /// The game update information.
+    update: GameUpdate,
+    /// The last seen value of update.
+    last_update: PlatformUpdate,
 }
 
 impl Game {
     #[must_use]
-    fn init() -> Self {
-        let platform = platform::Impl::init(640, 480);
+    fn init(update: GameUpdate) -> Self {
+        // let platform = platform::Impl::init(640, 480);
         let mut data = GlobalGameData::default();
         data.garage.load_hardcoded();
-        data.font = Font::new().unwrap();
         data.walls.set(true);
 
         #[cfg(not(target_arch = "wasm32"))]
         data.should_run.set(true);
 
-        let timer = Timer::new(&platform);
+        let last_update = update.send_update(RenderUpdate::Graph(RenderGraph::default()));
+        let timer = Timer::new(last_update.time_ms);
 
         Self {
-            platform,
             timer,
             mode: Box::new(TitleMode),
             data,
+            update,
+            last_update,
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn should_run(&self) -> bool {
-        self.data.should_run.get() && self.platform.should_run()
+        self.data.should_run.get() && self.last_update.should_run
     }
 
     fn update_controls(&mut self) {
         // get controls
-        let mut controls = self.platform.poll();
+        let mut controls = self.last_update.controls;
         // apply deadzone
         if controls.steering.abs() < DEADZONE {
             controls.steering = 0.0;
@@ -99,7 +169,7 @@ impl Game {
     fn iteration(mut self) -> Self {
         self.update_controls();
         // update game state
-        let (mut i, interp) = self.timer.frame_ticks(&self.platform);
+        let (mut i, interp) = self.timer.frame_ticks(self.last_update.time_ms);
         while i > 0 {
             i -= 1;
             self.mode = self.mode.tick(&self.data);
@@ -107,10 +177,22 @@ impl Game {
             self.data.pressed = Buttons::empty();
         }
         // render frame
-        let mut context = self.platform.start_frame();
-        self.mode.render(interp, &self.data, &mut context);
-        context.finish();
+        let mut graph = RenderGraph::default();
+        self.mode.render(
+            interp,
+            &self.data,
+            &mut graph,
+            self.last_update.width,
+            self.last_update.height,
+        );
+        self.last_update = self.update.send_update(RenderUpdate::Graph(graph));
+        // return game
         self
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn end(self) {
+        self.update.send_update(RenderUpdate::End);
     }
 }
 
@@ -132,21 +214,69 @@ fn create_closure(keep_alive: Rc<RefCell<Closure<dyn FnMut()>>>, game: Game) -> 
     }
 }
 
+fn generate_update(platform: &mut Impl) -> PlatformUpdate {
+    PlatformUpdate {
+        controls: platform.poll(),
+        width: platform.width(),
+        height: platform.height(),
+        time_ms: platform.time_msec(),
+        #[cfg(not(target_arch = "wasm32"))]
+        should_run: platform.should_run(),
+    }
+}
+
 pub fn run_game() {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let mut game = Game::init();
-        while game.should_run() {
-            game = game.iteration();
+        let (render_tx, render_rx) = std::sync::mpsc::sync_channel::<RenderUpdate>(0);
+        let (platform_tx, platform_rx) = std::sync::mpsc::sync_channel::<PlatformUpdate>(0);
+        let update = GameUpdate {
+            sender: render_tx,
+            receiver: platform_rx,
+        };
+        let mut platform = Impl::init(640, 480);
+
+        // game thread
+        let game_thread = std::thread::spawn(move || {
+            let mut game = Game::init(update);
+            while game.should_run() {
+                game = game.iteration();
+            }
+            // send end message
+            game.end();
+        });
+        // render thread runs here
+        let font = Font::new().unwrap();
+        loop {
+            // perform update exchange
+            let render_update = render_rx.recv().unwrap();
+            platform_tx.send(generate_update(&mut platform)).unwrap();
+            // get new messages
+            match render_update {
+                RenderUpdate::End => break,
+                RenderUpdate::Graph(graph) => {
+                    let mut ctx = GenericBaseContext::new(&mut platform);
+                    graph.render(&font, &mut ctx);
+                    ctx.finish();
+                }
+            }
         }
+        // join game thread when done
+        game_thread.join().unwrap();
     }
 
     #[cfg(target_arch = "wasm32")]
     {
+        let font = Font::new().unwrap();
+        // implementation of game update for WASM
+        let game_update = GameUpdate {
+            platform: RefCell::new(Impl::init(640, 480)),
+            font,
+        };
         // keeps the closure alive
         let keep_alive = Rc::new(RefCell::new(Closure::once(|| ())));
         // runs the infinite loop
-        create_closure(keep_alive.clone(), Game::init())();
+        create_closure(keep_alive.clone(), Game::init(game_update))();
     }
 }
 

@@ -22,7 +22,7 @@ use std::cell::Cell;
 
 use crate::{
     platform::{Buttons, Controls},
-    render::{context::RenderContext, Font},
+    render::graph::RenderGraph,
     vehicle::garage::Garage,
 };
 
@@ -34,8 +34,6 @@ pub struct GlobalGameData {
     pub pressed: Buttons,
     /// The vehicle models.
     pub garage: Garage,
-    /// The font.
-    pub font: Font,
     /// If true, enable walls. Stored in a Cell so it may be modified easily.
     pub walls: Cell<bool>,
     /// If false, the game stops running. Not present on web target.
@@ -50,5 +48,12 @@ pub trait Mode {
     fn tick(self: Box<Self>, data: &GlobalGameData) -> Box<dyn Mode>;
 
     /// Render this mode.
-    fn render(&self, interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext);
+    fn render(
+        &self,
+        interp: f32,
+        data: &GlobalGameData,
+        graph: &mut RenderGraph,
+        width: u16,
+        height: u16,
+    );
 }

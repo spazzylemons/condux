@@ -20,7 +20,7 @@ use crate::{
     mode::Mode,
     octree::Octree,
     platform::{Buttons, Controls},
-    render::context::{RenderContext, RenderContext3d},
+    render::graph::{RenderGraph, RenderGraph3d},
     spline::Spline,
     util::{Approach, Interpolate},
     vehicle::{garage::Garage, AIController, Controller, PlayerController, Vehicle},
@@ -75,9 +75,9 @@ impl VehicleState {
         (pos, rot_quat.into())
     }
 
-    fn render(&self, interp: f32, garage: &Garage, context: &mut RenderContext3d) {
+    fn render(&self, interp: f32, garage: &Garage, graph: &mut RenderGraph3d) {
         let (pos, rot) = self.interpolate(interp);
-        self.vehicle.render(garage, context, pos, rot);
+        self.vehicle.render(garage, graph, pos, rot);
     }
 
     /// Returns true if the vehicle was respawned.
@@ -347,7 +347,14 @@ impl Mode for RaceMode {
         self
     }
 
-    fn render(&self, interp: f32, data: &GlobalGameData, context: &mut dyn RenderContext) {
+    fn render(
+        &self,
+        interp: f32,
+        data: &GlobalGameData,
+        graph: &mut RenderGraph,
+        _width: u16,
+        _height: u16,
+    ) {
         let interp_camera_pos = self.prev_camera.pos.interpolate(self.camera.pos, interp);
         let interp_camera_target = self
             .prev_camera
@@ -355,24 +362,21 @@ impl Mode for RaceMode {
             .interpolate(self.camera.target, interp);
         let interp_camera_up = self.prev_camera.up.interpolate(self.camera.up, interp);
 
-        let mut context_3d = RenderContext3d::new(
-            context,
-            interp_camera_pos,
-            interp_camera_target,
-            interp_camera_up,
-        );
+        let mut graph_3d =
+            RenderGraph3d::new(interp_camera_pos, interp_camera_target, interp_camera_up);
 
         for state in &self.vehicle_states {
-            state.render(interp, &data.garage, &mut context_3d);
+            state.render(interp, &data.garage, &mut graph_3d);
         }
 
-        self.spline.render(&mut context_3d, data.walls.get());
+        self.spline.render(&mut graph_3d, data.walls.get());
 
         if self.camera_focus < self.vehicle_states.len() {
             let vehicle = &self.vehicle_states[self.camera_focus].vehicle;
             let speed = vehicle.signed_speed();
-            data.font
-                .write(context, 6.0, 6.0, 2.0, &format!("SPEED {:.2}", speed));
+            graph.text(6.0, 6.0, 2.0, format!("SPEED {:.2}", speed));
         }
+
+        graph.graph_3d(graph_3d);
     }
 }

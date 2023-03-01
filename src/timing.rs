@@ -14,8 +14,6 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::platform::{Impl, Platform};
-
 pub const TICKS_PER_SECOND: u8 = 60;
 pub const TICK_DELTA: f32 = 1.0 / (TICKS_PER_SECOND as f32);
 
@@ -26,9 +24,9 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new(platform: &Impl) -> Self {
+    pub fn new(millis: u64) -> Self {
         Self {
-            start_ms: platform.time_msec(),
+            start_ms: millis,
             num_seconds: 0,
             tick_in_second: 0,
         }
@@ -41,8 +39,7 @@ impl Timer {
     }
 
     /// Return the number of ticks to run for this frame, as well as interpolation
-    pub fn frame_ticks(&mut self, platform: &Impl) -> (u16, f32) {
-        let millis = platform.time_msec();
+    pub fn frame_ticks(&mut self, millis: u64) -> (u16, f32) {
         let mut ticks = 0;
         while millis >= self.tick_ms() {
             self.tick_in_second += 1;

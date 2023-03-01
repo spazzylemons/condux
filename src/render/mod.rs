@@ -16,6 +16,7 @@
 
 pub mod context;
 pub mod font;
+pub mod graph;
 pub mod mesh;
 
 pub use font::Font;

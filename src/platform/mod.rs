@@ -16,8 +16,6 @@
 
 use bitflags::bitflags;
 
-use crate::render::context::GenericBaseContext;
-
 bitflags! {
     #[derive(Default)]
     pub struct Buttons: u8 {
@@ -46,13 +44,6 @@ pub trait Platform {
     fn should_run(&self) -> bool;
 
     fn time_msec(&self) -> u64;
-
-    fn start_frame(&mut self) -> GenericBaseContext<'_, Self>
-    where
-        Self: Sized,
-    {
-        GenericBaseContext::<'_, Self>::new(self)
-    }
 
     fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32);
 
