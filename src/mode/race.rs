@@ -27,6 +27,7 @@ use crate::{
 };
 
 use super::{
+    loading::LoadingMode,
     pause::{MenuOption, PauseMode},
     title::TitleMode,
     GlobalGameData,
@@ -201,24 +202,26 @@ impl RaceMode {
     }
 
     #[must_use]
-    pub fn initialized(garage: &Garage) -> Self {
-        let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
-        let octree = Octree::new(&spline);
-        let mut mode = Self::new(spline, octree, 0);
-        // spawn player
-        let spawn = mode.spline.get_baked(0.0);
+    pub fn initializing(garage: &Garage) -> LoadingMode<Self> {
         let model = garage.get_id("default").unwrap();
-        mode.spawn(spawn, model, Box::new(PlayerController::default()));
-        // spawn some other vehicles
-        let spawn = mode.spline.get_baked(5.0);
-        mode.spawn(spawn, model, Box::new(AIController::default()));
-        let spawn = mode.spline.get_baked(10.0);
-        mode.spawn(spawn, model, Box::new(AIController::default()));
-        let spawn = mode.spline.get_baked(15.0);
-        mode.spawn(spawn, model, Box::new(AIController::default()));
-        // set camera behind player
-        mode.teleport_camera();
-        mode
+        LoadingMode::new(move || {
+            let spline = Spline::load(&mut Asset::load("course_test1.bin").unwrap()).unwrap();
+            let octree = Octree::new(&spline);
+            let mut mode = Self::new(spline, octree, 0);
+            // spawn player
+            let spawn = mode.spline.get_baked(0.0);
+            mode.spawn(spawn, model, Box::new(PlayerController::default()));
+            // spawn some other vehicles
+            let spawn = mode.spline.get_baked(5.0);
+            mode.spawn(spawn, model, Box::new(AIController::default()));
+            let spawn = mode.spline.get_baked(10.0);
+            mode.spawn(spawn, model, Box::new(AIController::default()));
+            let spawn = mode.spline.get_baked(15.0);
+            mode.spawn(spawn, model, Box::new(AIController::default()));
+            // set camera behind player
+            mode.teleport_camera();
+            mode
+        })
     }
 
     pub fn spawn(&mut self, pos: Vector, model_id: u16, controller: Box<dyn Controller>) {
@@ -259,7 +262,7 @@ impl Mode for RaceMode {
                     MenuOption::previous(String::from("resume")),
                     // creates new race state
                     MenuOption::switch(String::from("restart"), |data| {
-                        Box::new(RaceMode::initialized(&data.garage))
+                        Box::new(RaceMode::initializing(&data.garage))
                     }),
                     // toggles walls
                     MenuOption::data(String::from("toggle walls"), |data| {

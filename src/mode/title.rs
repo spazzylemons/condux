@@ -31,7 +31,7 @@ impl Mode for TitleMode {
 
         if data.pressed.contains(Buttons::OK) {
             // transition to race
-            Box::new(RaceMode::initialized(&data.garage))
+            Box::new(RaceMode::initializing(&data.garage))
         } else {
             self
         }

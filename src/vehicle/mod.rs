@@ -351,7 +351,7 @@ impl Default for Pedal {
     }
 }
 
-pub trait Controller {
+pub trait Controller: Send {
     fn pedal(&self) -> Pedal;
 
     fn steering(&self) -> f32;
