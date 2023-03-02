@@ -92,7 +92,6 @@ struct PlatformUpdate {
     controls: Controls,
     width: u16,
     height: u16,
-    time_ms: u64,
     #[cfg(not(target_arch = "wasm32"))]
     should_run: bool,
 }
@@ -131,7 +130,7 @@ impl Game {
         data.should_run.set(true);
 
         let last_update = update.send_update(RenderUpdate::Graph(RenderGraph::default()));
-        let timer = Timer::new(last_update.time_ms);
+        let timer = Timer::new();
 
         Self {
             timer,
@@ -169,7 +168,7 @@ impl Game {
     fn iteration(mut self) -> Self {
         self.update_controls();
         // update game state
-        let (mut i, interp) = self.timer.frame_ticks(self.last_update.time_ms);
+        let (mut i, interp) = self.timer.frame_ticks();
         while i > 0 {
             i -= 1;
             self.mode = self.mode.tick(&self.data);
@@ -219,7 +218,6 @@ fn generate_update(platform: &mut Impl) -> PlatformUpdate {
         controls: platform.poll(),
         width: platform.width(),
         height: platform.height(),
-        time_ms: platform.time_msec(),
         #[cfg(not(target_arch = "wasm32"))]
         should_run: platform.should_run(),
     }

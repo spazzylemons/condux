@@ -17,29 +17,70 @@
 pub const TICKS_PER_SECOND: u8 = 60;
 pub const TICK_DELTA: f32 = 1.0 / (TICKS_PER_SECOND as f32);
 
+/// Wraps Instant for non-WASM targets.
+#[cfg(not(target_arch = "wasm32"))]
+struct InstantWrapper {
+    start: std::time::Instant,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl InstantWrapper {
+    fn new() -> Self {
+        Self {
+            start: std::time::Instant::now(),
+        }
+    }
+
+    fn millis(&self) -> u128 {
+        std::time::Instant::now()
+            .duration_since(self.start)
+            .as_millis()
+    }
+}
+
+/// Simulates Instant using Performance.now() for WASM target.
+#[cfg(target_arch = "wasm32")]
+struct InstantWrapper {
+    performance: web_sys::Performance,
+    start: f64,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl InstantWrapper {
+    fn new() -> Self {
+        let performance = web_sys::window().unwrap().performance().unwrap();
+        let start = performance.now();
+        Self { performance, start }
+    }
+
+    fn millis(&self) -> u128 {
+        (self.performance.now() - self.start) as _
+    }
+}
+
 pub struct Timer {
-    start_ms: u64,
-    num_seconds: u64,
+    start: InstantWrapper,
+    num_seconds: u128,
     tick_in_second: u8,
 }
 
 impl Timer {
-    pub fn new(millis: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            start_ms: millis,
+            start: InstantWrapper::new(),
             num_seconds: 0,
             tick_in_second: 0,
         }
     }
 
-    fn tick_ms(&self) -> u64 {
-        self.start_ms
-            + (1000 * self.num_seconds)
-            + (1000 * u64::from(self.tick_in_second)) / u64::from(TICKS_PER_SECOND)
+    fn tick_ms(&self) -> u128 {
+        (1000 * self.num_seconds)
+            + u128::from((1000 * u16::from(self.tick_in_second)) / u16::from(TICKS_PER_SECOND))
     }
 
     /// Return the number of ticks to run for this frame, as well as interpolation
-    pub fn frame_ticks(&mut self, millis: u64) -> (u16, f32) {
+    pub fn frame_ticks(&mut self) -> (u16, f32) {
+        let millis = self.start.millis();
         let mut ticks = 0;
         while millis >= self.tick_ms() {
             self.tick_in_second += 1;

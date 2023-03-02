@@ -16,7 +16,7 @@
 
 use sdl2::event::Event;
 
-use std::{collections::HashMap, error::Error, ffi::CString, time::Instant};
+use std::{collections::HashMap, error::Error, ffi::CString};
 
 use super::{Buttons, Controls, Platform};
 
@@ -386,8 +386,6 @@ pub struct SdlPlatform {
     window: sdl2::video::Window,
     _gl_ctx: sdl2::video::GLContext,
 
-    epoch: Instant,
-
     width: u16,
     height: u16,
 
@@ -491,8 +489,6 @@ impl Platform for SdlPlatform {
             window,
             _gl_ctx: gl_ctx,
 
-            epoch: Instant::now(),
-
             width: preferred_width,
             height: preferred_height,
 
@@ -511,14 +507,6 @@ impl Platform for SdlPlatform {
 
     fn should_run(&self) -> bool {
         self.should_run
-    }
-
-    fn time_msec(&self) -> u64 {
-        self.epoch
-            .elapsed()
-            .as_millis()
-            .try_into()
-            .expect("you've been running the game too long!")
     }
 
     fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {

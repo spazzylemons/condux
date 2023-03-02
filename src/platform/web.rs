@@ -95,8 +95,6 @@ pub struct WebPlatform {
     canvas: web_sys::HtmlCanvasElement,
     /// 2d context for the canvas
     ctx: web_sys::CanvasRenderingContext2d,
-    /// Performance to read time from
-    performance: web_sys::Performance,
     /// Navigator to read gamepads from
     navigator: web_sys::Navigator,
     /// Virtual analog stick
@@ -166,8 +164,6 @@ impl Platform for WebPlatform {
             .unwrap()
             .dyn_into::<web_sys::CanvasRenderingContext2d>()
             .unwrap();
-        // get the performance object
-        let performance = window.performance().unwrap();
         // get the navigator object
         let navigator = window.navigator();
         // get the mapping note element
@@ -218,7 +214,6 @@ impl Platform for WebPlatform {
             keyboard_buttons,
             canvas,
             ctx,
-            performance,
             navigator,
             virtual_analog: TouchElement::new("virtual-analog", &document),
             pause_press,
@@ -229,10 +224,6 @@ impl Platform for WebPlatform {
             _key_up: key_up,
             _on_click: on_click,
         }
-    }
-
-    fn time_msec(&self) -> u64 {
-        self.performance.now() as _
     }
 
     fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {

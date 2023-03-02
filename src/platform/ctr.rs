@@ -140,10 +140,6 @@ impl Platform for CitroPlatform {
         self.apt.main_loop()
     }
 
-    fn time_msec(&self) -> u64 {
-        unsafe { ctru_sys::osGetTime() }
-    }
-
     fn buffer_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
         self.lines.push(((x0, y0), (x1, y1)));
     }
