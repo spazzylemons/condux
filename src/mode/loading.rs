@@ -54,6 +54,15 @@ where
     }
 }
 
+fn render_mono(graph: &mut RenderGraph, height: u16) {
+    graph.text(
+        16.0,
+        f32::from(height) - 16.0 - (6.0 * 4.0),
+        4.0,
+        String::from("Loading..."),
+    );
+}
+
 impl<T> Mode for LoadingMode<T>
 where
     T: Mode + 'static,
@@ -80,11 +89,6 @@ where
         _width: u16,
         height: u16,
     ) {
-        graph.text(
-            16.0,
-            f32::from(height) - 16.0 - (6.0 * 4.0),
-            4.0,
-            String::from("Loading..."),
-        );
+        render_mono(graph, height);
     }
 }

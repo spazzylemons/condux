@@ -94,6 +94,10 @@ struct PlatformUpdate {
     height: u16,
     #[cfg(not(target_arch = "wasm32"))]
     should_run: bool,
+    #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+    mouse_state: sdl2::mouse::MouseState,
+    #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+    scroll_wheel: i32,
 }
 
 /// Contains information sent from the game thread to the render thread.
@@ -163,6 +167,11 @@ impl Game {
         // determine which buttons were pressed
         self.data.pressed = controls.buttons & !self.data.controls.buttons;
         self.data.controls = controls;
+        #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+        {
+            self.data.mouse_state = self.last_update.mouse_state;
+            self.data.scroll_wheel = self.last_update.scroll_wheel;
+        }
     }
 
     fn iteration(mut self) -> Self {
@@ -174,6 +183,10 @@ impl Game {
             self.mode = self.mode.tick(&self.data);
             // clear pressed buttons to avoid triggering stuff if we need to run multiple frames
             self.data.pressed = Buttons::empty();
+            #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+            {
+                self.data.scroll_wheel = 0;
+            }
         }
         // render frame
         let mut graph = RenderGraph::default();
@@ -220,6 +233,10 @@ fn generate_update(platform: &mut Impl) -> PlatformUpdate {
         height: platform.height(),
         #[cfg(not(target_arch = "wasm32"))]
         should_run: platform.should_run(),
+        #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+        mouse_state: platform.get_mouse(),
+        #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+        scroll_wheel: platform.get_scroll_wheel(),
     }
 }
 

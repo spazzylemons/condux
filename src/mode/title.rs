@@ -16,6 +16,9 @@
 
 use crate::{platform::Buttons, render::graph::RenderGraph};
 
+#[cfg(not(any(target_os = "horizon", target_arch = "wasm32")))]
+use super::editor::EditorMode;
+
 use super::{race::RaceMode, GlobalGameData, Mode};
 
 pub struct TitleMode;
@@ -27,6 +30,12 @@ impl Mode for TitleMode {
         #[cfg(not(target_arch = "wasm32"))]
         if data.pressed.contains(Buttons::BACK) {
             data.should_run.set(false);
+        }
+
+        // load editor if pause pressed
+        #[cfg(not(any(target_os = "horizon", target_arch = "wasm32")))]
+        if data.pressed.contains(Buttons::PAUSE) {
+            return Box::new(EditorMode::load());
         }
 
         if data.pressed.contains(Buttons::OK) {
@@ -52,5 +61,13 @@ impl Mode for TitleMode {
 
         #[cfg(not(target_arch = "wasm32"))]
         graph.text_centered(center, 160.0, 4.0, String::from("Press Back to quit"));
+
+        #[cfg(not(any(target_os = "horizon", target_arch = "wasm32")))]
+        graph.text_centered(
+            center,
+            200.0,
+            4.0,
+            String::from("Press Pause to load editor"),
+        );
     }
 }

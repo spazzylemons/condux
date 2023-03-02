@@ -394,6 +394,8 @@ pub struct SdlPlatform {
     keyboard_buttons: Buttons,
 
     controller: Option<sdl2::controller::GameController>,
+    /// Scroll wheel this frame.
+    scroll_wheel: i32,
 
     /// Buffered points.
     points: Vec<f32>,
@@ -452,6 +454,16 @@ macro_rules! shader {
     };
 }
 
+impl SdlPlatform {
+    pub fn get_mouse(&self) -> sdl2::mouse::MouseState {
+        self.event_pump.mouse_state()
+    }
+
+    pub fn get_scroll_wheel(&self) -> i32 {
+        self.scroll_wheel
+    }
+}
+
 impl Platform for SdlPlatform {
     fn init(preferred_width: u16, preferred_height: u16) -> Self {
         let ctx = sdl2::init().unwrap();
@@ -497,6 +509,8 @@ impl Platform for SdlPlatform {
 
             controller: None,
 
+            scroll_wheel: 0,
+
             points: vec![],
             lines_unit,
             framebuffer_unit,
@@ -535,6 +549,7 @@ impl Platform for SdlPlatform {
         // swap buffers
         self.window.gl_swap_window();
         // accept events
+        self.scroll_wheel = 0;
         for event in self.event_pump.poll_iter() {
             match event {
                 Event::Window { win_event, .. } => match win_event {
@@ -562,6 +577,13 @@ impl Platform for SdlPlatform {
                     ..
                 } => {
                     self.keyboard_buttons &= !get_keycode_bitmask(keycode);
+                }
+
+                Event::MouseWheel { y, direction, .. } => {
+                    self.scroll_wheel = y;
+                    if direction == sdl2::mouse::MouseWheelDirection::Flipped {
+                        self.scroll_wheel = -self.scroll_wheel;
+                    }
                 }
 
                 _ => {}

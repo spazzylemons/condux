@@ -14,6 +14,9 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#[cfg(not(any(target_os = "horizon", target_arch = "wasm32")))]
+pub mod editor;
+
 pub mod loading;
 pub mod pause;
 pub mod race;
@@ -27,7 +30,6 @@ use crate::{
     vehicle::garage::Garage,
 };
 
-#[derive(Default)]
 pub struct GlobalGameData {
     /// The last state of the controls.
     pub controls: Controls,
@@ -40,6 +42,29 @@ pub struct GlobalGameData {
     /// If false, the game stops running. Not present on web target.
     #[cfg(not(target_arch = "wasm32"))]
     pub should_run: Cell<bool>,
+    /// The mouse state, used for the editor.
+    #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+    pub mouse_state: sdl2::mouse::MouseState,
+    /// The mouse scroll wheel this frame.
+    #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+    pub scroll_wheel: i32,
+}
+
+impl Default for GlobalGameData {
+    fn default() -> Self {
+        Self {
+            controls: Controls::default(),
+            pressed: Buttons::default(),
+            garage: Garage::default(),
+            walls: Cell::<bool>::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            should_run: Cell::<bool>::default(),
+            #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+            mouse_state: sdl2::mouse::MouseState::from_sdl_state(0),
+            #[cfg(not(any(target_arch = "wasm32", target_os = "horizon")))]
+            scroll_wheel: 0,
+        }
+    }
 }
 
 /// A game mode.
