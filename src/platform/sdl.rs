@@ -16,7 +16,7 @@
 
 use sdl2::event::Event;
 
-use std::{ffi::CString, time::Instant};
+use std::{collections::HashMap, error::Error, ffi::CString, time::Instant};
 
 use super::{Buttons, Controls, Platform};
 
@@ -27,17 +27,262 @@ mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
-struct Shader {
-    id: gl::types::GLuint,
+macro_rules! gl_resource_wrapper {
+    (single $name:ident $ctor:ident $dtor:ident $($arg:ident : $t:ty),*) => {
+        struct $name {
+            id: gl::types::GLuint,
+        }
+
+        impl $name {
+            fn new($($arg: $t),*) -> Self {
+                Self {
+                    id: unsafe { gl::$ctor($($arg),*) }
+                }
+            }
+        }
+
+        impl Drop for $name {
+            fn drop(&mut self) {
+                unsafe {
+                    gl::$dtor(self.id);
+                }
+            }
+        }
+    };
+
+    (batch $name:ident $ctor:ident $dtor:ident) => {
+        struct $name {
+            id: gl::types::GLuint,
+        }
+
+        impl $name {
+            fn new() -> Self {
+                let mut id: gl::types::GLuint = 0;
+                unsafe {
+                    gl::$ctor(1, &mut id);
+                }
+                Self { id }
+            }
+        }
+
+        impl Drop for $name {
+            fn drop(&mut self) {
+                unsafe {
+                    gl::$dtor(1, &self.id);
+                }
+            }
+        }
+    }
+}
+
+gl_resource_wrapper! { single Shader CreateShader DeleteShader ty: gl::types::GLenum }
+gl_resource_wrapper! { single Program CreateProgram DeleteProgram }
+gl_resource_wrapper! { batch VAO GenVertexArrays DeleteVertexArrays }
+gl_resource_wrapper! { batch VBO GenBuffers DeleteBuffers }
+gl_resource_wrapper! { batch Framebuffer GenFramebuffers DeleteFramebuffers }
+gl_resource_wrapper! { batch Texture GenTextures DeleteTextures }
+
+/// Wraps a program, VAO, and VBO together and renders them as one unit.
+struct RenderUnit {
+    program: Program,
+    vao: VAO,
+    vbo: VBO,
+    num_attributes: usize,
+    uniforms: HashMap<&'static str, gl::types::GLint>,
+}
+
+impl RenderUnit {
+    fn new(
+        vertex_source: &str,
+        fragment_source: &str,
+        num_attributes: usize,
+        uniform_list: &[&'static str],
+    ) -> Result<Self, Box<dyn Error>> {
+        let program = Program::create(vertex_source, fragment_source)?;
+        let vao = VAO::new();
+        let vbo = VBO::new();
+        // create attributes
+        let stride = 2 * num_attributes * std::mem::size_of::<f32>();
+        unsafe {
+            gl::BindVertexArray(vao.id);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo.id);
+        }
+        for i in 0..num_attributes {
+            unsafe {
+                gl::VertexAttribPointer(
+                    i as _,
+                    2,
+                    gl::FLOAT,
+                    gl::FALSE,
+                    stride as _,
+                    std::mem::transmute(2 * i * std::mem::size_of::<f32>()),
+                );
+                gl::EnableVertexAttribArray(i as _);
+            }
+        }
+        let mut uniforms = HashMap::new();
+        for &uniform in uniform_list {
+            let cstr = CString::new(uniform)?;
+            let location = unsafe { gl::GetUniformLocation(program.id, cstr.as_ptr()) };
+            if location == -1 {
+                return Err(format!("unknown uniform: {uniform}").into());
+            }
+            uniforms.insert(uniform, location);
+        }
+        Ok(Self {
+            program,
+            vao,
+            vbo,
+            num_attributes,
+            uniforms,
+        })
+    }
+
+    fn start<'a>(&self, points: &'a [f32]) -> RenderUnitBuilder<'_, 'a> {
+        RenderUnitBuilder {
+            render_unit: self,
+            clear: false,
+            points,
+            primitives: vec![],
+            texture: None,
+            framebuffer: None,
+            uniforms: vec![],
+        }
+    }
+}
+
+struct RenderUnitBuilder<'a, 'b> {
+    /// A reference to the render unit to use.
+    render_unit: &'a RenderUnit,
+    /// If true, we will clear the screen first.
+    clear: bool,
+    /// List of points to render to.
+    points: &'b [f32],
+    /// Primitives to use for the points.
+    primitives: Vec<gl::types::GLenum>,
+    /// The texture to bind when rendering.
+    texture: Option<&'b Texture>,
+    /// The framebuffer to render to.
+    framebuffer: Option<(u16, u16, &'b Framebuffer, &'b Texture)>,
+    /// The uniforms
+    uniforms: Vec<(gl::types::GLint, f32, f32)>,
+}
+
+impl<'a, 'b> RenderUnitBuilder<'a, 'b> {
+    fn clear(mut self) -> Self {
+        self.clear = true;
+        self
+    }
+
+    fn primitive(mut self, primitive: gl::types::GLenum) -> Self {
+        self.primitives.push(primitive);
+        self
+    }
+
+    fn texture(mut self, texture: &'b Texture) -> Self {
+        self.texture = Some(texture);
+        self
+    }
+
+    fn framebuffer(
+        mut self,
+        width: u16,
+        height: u16,
+        framebuffer: &'b Framebuffer,
+        texture: &'b Texture,
+    ) -> Self {
+        self.framebuffer = Some((width, height, framebuffer, texture));
+        self
+    }
+
+    fn uniform(mut self, name: &'static str, x: f32, y: f32) -> Self {
+        let uniform = *self
+            .render_unit
+            .uniforms
+            .get(name)
+            .expect("invalid uniform");
+        self.uniforms.push((uniform, x, y));
+        self
+    }
+
+    fn render(self) {
+        if let Some((width, height, framebuffer, texture)) = self.framebuffer {
+            unsafe {
+                gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffer.id);
+                gl::BindTexture(gl::TEXTURE_2D, texture.id);
+                // allocate texture to be size of screen
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RED as _,
+                    width.into(),
+                    height.into(),
+                    0,
+                    gl::RED,
+                    gl::UNSIGNED_BYTE,
+                    std::ptr::null(),
+                );
+                // set filters - we shouldn't need them because the framebuffer will always be the screen size
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
+                // attach to framebuffer
+                gl::FramebufferTexture2D(
+                    gl::FRAMEBUFFER,
+                    gl::COLOR_ATTACHMENT0,
+                    gl::TEXTURE_2D,
+                    texture.id,
+                    0,
+                );
+            }
+        } else {
+            unsafe {
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            }
+        };
+
+        unsafe {
+            if let Some(texture) = self.texture {
+                gl::BindTexture(gl::TEXTURE_2D, texture.id);
+            } else {
+                gl::BindTexture(gl::TEXTURE_2D, 0);
+            }
+
+            gl::BindVertexArray(self.render_unit.vao.id);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.render_unit.vbo.id);
+            gl::UseProgram(self.render_unit.program.id);
+
+            if self.clear {
+                gl::Clear(gl::COLOR_BUFFER_BIT);
+            }
+        }
+
+        for (uniform, x, y) in self.uniforms {
+            unsafe {
+                gl::Uniform2f(uniform, x, y);
+            }
+        }
+
+        unsafe {
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                (std::mem::size_of::<f32>() * self.points.len()) as _,
+                self.points.as_ptr() as *const std::ffi::c_void,
+                gl::STATIC_DRAW,
+            );
+        }
+        for primitive in self.primitives {
+            unsafe {
+                gl::DrawArrays(
+                    primitive,
+                    0,
+                    (self.points.len() / (self.render_unit.num_attributes * 2)) as _,
+                );
+            }
+        }
+    }
 }
 
 impl Shader {
-    fn new(ty: gl::types::GLenum) -> Self {
-        Self {
-            id: unsafe { gl::CreateShader(ty) },
-        }
-    }
-
     fn source(&self, source: &str) {
         let strings = [source.as_ptr() as *const gl::types::GLchar];
         let lengths = [source.len() as gl::types::GLint];
@@ -80,25 +325,7 @@ impl Shader {
     }
 }
 
-impl Drop for Shader {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteShader(self.id);
-        }
-    }
-}
-
-struct Program {
-    id: gl::types::GLuint,
-}
-
 impl Program {
-    fn new() -> Self {
-        Self {
-            id: unsafe { gl::CreateProgram() },
-        }
-    }
-
     fn attach(&self, shader: &Shader) {
         unsafe {
             gl::AttachShader(self.id, shader.id);
@@ -138,142 +365,18 @@ impl Program {
         }
     }
 
-    fn use_program(&self) {
-        unsafe {
-            gl::UseProgram(self.id);
-        }
-    }
-
-    fn get_uniform(&self, name: &str) -> Option<Uniform> {
-        if let Ok(cstr) = CString::new(name) {
-            let location = unsafe { gl::GetUniformLocation(self.id, cstr.as_ptr()) };
-            if location == -1 {
-                None
-            } else {
-                Some(Uniform { location })
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl Drop for Program {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteProgram(self.id);
-        }
-    }
-}
-
-struct VAO {
-    id: gl::types::GLuint,
-}
-
-impl VAO {
-    fn new() -> Self {
-        let mut id: gl::types::GLuint = 0;
-        unsafe {
-            gl::GenVertexArrays(1, &mut id);
-        }
-        Self { id }
-    }
-
-    fn bind(&self) {
-        unsafe {
-            gl::BindVertexArray(self.id);
-        }
-    }
-
-    fn enable(index: gl::types::GLuint) {
-        unsafe {
-            gl::EnableVertexAttribArray(index);
-        }
-    }
-
-    fn attrib_ptr(
-        index: gl::types::GLuint,
-        size: gl::types::GLint,
-        ty: gl::types::GLenum,
-        normalized: bool,
-        stride: gl::types::GLsizei,
-        offset: usize,
-    ) {
-        unsafe {
-            gl::VertexAttribPointer(
-                index,
-                size,
-                ty,
-                normalized.into(),
-                stride,
-                std::mem::transmute(offset),
-            );
-        }
-    }
-}
-
-impl Drop for VAO {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteVertexArrays(1, &self.id);
-        }
-    }
-}
-
-struct VBO {
-    id: gl::types::GLuint,
-}
-
-impl VBO {
-    fn new() -> Self {
-        let mut id: gl::types::GLuint = 0;
-        unsafe {
-            gl::GenBuffers(1, &mut id);
-        }
-        Self { id }
-    }
-
-    fn bind(&self, target: gl::types::GLenum) {
-        unsafe {
-            gl::BindBuffer(target, self.id);
-        }
-    }
-
-    fn data<T>(target: gl::types::GLenum, ptr: &[T], usage: gl::types::GLenum) {
-        unsafe {
-            gl::BufferData(
-                target,
-                (std::mem::size_of::<T>() * ptr.len()) as _,
-                ptr.as_ptr() as *const std::ffi::c_void,
-                usage,
-            );
-        }
-    }
-}
-
-impl Drop for VBO {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteBuffers(1, &self.id);
-        }
-    }
-}
-
-struct Uniform {
-    location: gl::types::GLint,
-}
-
-impl Uniform {
-    fn vec2(&self, x: f32, y: f32) {
-        unsafe {
-            gl::Uniform2f(self.location, x, y);
-        }
-    }
-}
-
-fn draw_arrays(mode: gl::types::GLenum, start: gl::types::GLsizei, count: gl::types::GLsizei) {
-    unsafe {
-        gl::DrawArrays(mode, start, count);
+    fn create(vertex: &str, fragment: &str) -> Result<Self, String> {
+        let vertex_shader = Shader::new(gl::VERTEX_SHADER);
+        vertex_shader.source(vertex);
+        vertex_shader.compile()?;
+        let fragment_shader = Shader::new(gl::FRAGMENT_SHADER);
+        fragment_shader.source(fragment);
+        fragment_shader.compile()?;
+        let result = Self::new();
+        result.attach(&vertex_shader);
+        result.attach(&fragment_shader);
+        result.link()?;
+        Ok(result)
     }
 }
 
@@ -296,14 +399,14 @@ pub struct SdlPlatform {
 
     /// Buffered points.
     points: Vec<f32>,
-    /// Viewport shader uniform.
-    viewport: Uniform,
-    /// Active OpenGL shader program.
-    _program: Program,
-    /// Active vertex array object.
-    _vao: VAO,
-    /// Active vertex buffer object.
-    _vbo: VBO,
+    /// Render unit for lines.
+    lines_unit: RenderUnit,
+    /// Render unit for framebuffer.
+    framebuffer_unit: RenderUnit,
+    /// The texture to use on the framebuffer.
+    texture: Texture,
+    /// The framebuffer to use.
+    framebuffer: Framebuffer,
 }
 
 static KEYBOARD_MAPPING: [sdl2::keyboard::Keycode; 7] = [
@@ -335,6 +438,22 @@ fn get_keycode_bitmask(keycode: sdl2::keyboard::Keycode) -> Buttons {
     Buttons::empty()
 }
 
+// (x, y) and (u, v) of the framebuffer quad
+static QUAD_VERTICES: [f32; 16] = [
+    -1.0, 1.0, 0.0, 1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 0.0,
+];
+
+macro_rules! shader {
+    ($name:literal) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shader/",
+            $name,
+            ".glsl"
+        ))
+    };
+}
+
 impl Platform for SdlPlatform {
     fn init(preferred_width: u16, preferred_height: u16) -> Self {
         let ctx = sdl2::init().unwrap();
@@ -352,33 +471,15 @@ impl Platform for SdlPlatform {
         let controller_ctx = ctx.game_controller().unwrap();
         let event_pump = ctx.event_pump().unwrap();
 
-        let vertex = Shader::new(gl::VERTEX_SHADER);
-        vertex.source(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/shader/vertex.glsl"
-        )));
-        vertex.compile().unwrap();
-        let fragment = Shader::new(gl::FRAGMENT_SHADER);
-        fragment.source(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/shader/fragment.glsl"
-        )));
-        fragment.compile().unwrap();
-
-        let program = Program::new();
-        program.attach(&vertex);
-        program.attach(&fragment);
-        program.link().unwrap();
-        program.use_program();
-
-        let vao = VAO::new();
-        let vbo = VBO::new();
-
-        vao.bind();
-        vbo.bind(gl::ARRAY_BUFFER);
-
-        VAO::attrib_ptr(0, 2, gl::FLOAT, false, 0, 0);
-        VAO::enable(0);
+        let lines_unit =
+            RenderUnit::new(shader!("vertex"), shader!("fragment"), 1, &["viewport"]).unwrap();
+        let framebuffer_unit = RenderUnit::new(
+            shader!("vertex_framebuffer"),
+            shader!("fragment_framebuffer"),
+            2,
+            &[],
+        )
+        .unwrap();
 
         unsafe {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
@@ -401,10 +502,10 @@ impl Platform for SdlPlatform {
             controller: None,
 
             points: vec![],
-            viewport: program.get_uniform("viewport").unwrap(),
-            _program: program,
-            _vao: vao,
-            _vbo: vbo,
+            lines_unit,
+            framebuffer_unit,
+            texture: Texture::new(),
+            framebuffer: Framebuffer::new(),
         }
     }
 
@@ -428,22 +529,21 @@ impl Platform for SdlPlatform {
     }
 
     fn end_frame(&mut self) {
-        unsafe {
-            // clear screen
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-        }
-
-        // send viewport to shader
-        self.viewport.vec2(self.width.into(), self.height.into());
-        // load points into buffer
-        VBO::data(gl::ARRAY_BUFFER, &self.points, gl::STATIC_DRAW);
-        let num_points = self.points.len() / 2;
-        // clear local point buffer
+        self.lines_unit
+            .start(&self.points)
+            .clear()
+            .primitive(gl::LINES)
+            .primitive(gl::POINTS)
+            .framebuffer(self.width, self.height, &self.framebuffer, &self.texture)
+            .uniform("viewport", self.width.into(), self.height.into())
+            .render();
         self.points.clear();
-        // use array buffer to draw lines
-        draw_arrays(gl::LINES, 0, num_points as _);
-        // use it again to connect them
-        draw_arrays(gl::POINTS, 0, num_points as _);
+        // two-pass gaussian
+        self.framebuffer_unit
+            .start(&QUAD_VERTICES)
+            .primitive(gl::TRIANGLE_STRIP)
+            .texture(&self.texture)
+            .render();
         // swap buffers
         self.window.gl_swap_window();
         // accept events
