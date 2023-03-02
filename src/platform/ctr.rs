@@ -78,6 +78,9 @@ mod citro2d_sys {
     }
 }
 
+/// ABGR of the line color
+const PHOSPHOR: u32 = 0xff_66_ff_33;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Point {
@@ -156,10 +159,10 @@ impl Platform for CitroPlatform {
                 citro2d_sys::C2D_DrawLine(
                     *x0 + 0.5,
                     *y0 + 0.5,
-                    0xff_ff_ff_ff,
+                    PHOSPHOR,
                     *x1 + 0.5,
                     *y1 + 0.5,
-                    0xff_ff_ff_ff,
+                    PHOSPHOR,
                     1.0,
                     0.0,
                 );

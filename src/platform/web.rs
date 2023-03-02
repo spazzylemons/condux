@@ -243,7 +243,7 @@ impl Platform for WebPlatform {
         // set line style
         self.ctx.set_line_width(1.0);
         self.ctx
-            .set_stroke_style(&wasm_bindgen::JsValue::from_str("white"));
+            .set_stroke_style(&wasm_bindgen::JsValue::from_str("#3f6"));
         for ((x0, y0), (x1, y1)) in &self.lines {
             self.ctx.begin_path();
             // add 0.5 for less blurry text
