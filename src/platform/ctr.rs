@@ -111,6 +111,12 @@ impl Drop for CitroPlatform {
     }
 }
 
+unsafe fn check_new_3ds() -> ctru::Result<bool> {
+    let mut result = false;
+    ctru::error::ResultCode(ctru_sys::APT_CheckNew3DS(&mut result))?;
+    Ok(result)
+}
+
 impl Platform for CitroPlatform {
     fn init(_preferred_width: u16, _preferred_height: u16) -> Self {
         ctru::use_panic_handler();
@@ -118,6 +124,13 @@ impl Platform for CitroPlatform {
         let hid = Hid::init().unwrap();
         let gfx = Gfx::init().unwrap();
         let apt = Apt::init().unwrap();
+
+        // request fast CPU - sorry for the lag O3DS users
+        unsafe {
+            if let Ok(true) = check_new_3ds() {
+                ctru_sys::osSetSpeedupEnable(true);
+            }
+        }
 
         let target = unsafe {
             // initialize citro3d
